@@ -20,6 +20,19 @@ firebase-debug.log
 wordlist.txt
 worddb.json
 .node-version
+worddb.full.json
+public/worddb.json
+app/worddb.full.json
+app/public/worddb.json
+# generated word db outputs
+worddb.full.json
+public/worddb.json
+app/worddb.full.json
+app/public/worddb.json
+
+# cluer app bundle (should never be committed)
+cluer.app/
+cluer.zip
 
 # Created by https://www.gitignore.io/api/node,firebase
 # Edit at https://www.gitignore.io/?templates=node,firebase

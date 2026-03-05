@@ -1,8 +1,6 @@
-import { getDownloadURL, ref } from 'firebase/storage';
 import { useState } from 'react';
 import * as WordDB from '../lib/WordDB.js';
 import { useWordDB } from '../lib/WordDB.js';
-import { getStorage } from '../lib/firebaseWrapper.js';
 import { Button } from './Buttons.js';
 import { DefaultTopBar } from './TopBar.js';
 
@@ -13,38 +11,56 @@ export const LoadButton = (props: {
 }): React.JSX.Element => {
   const [dlInProgress, setDlInProgress] = useState<boolean>(false);
   const [validating, setValidating] = useState<boolean>(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string>('');
 
-  const startBuild = () => {
-    if (props.onClick) {
+  const startBuild = (): void => {
+    if (typeof props.onClick === 'function') {
       props.onClick();
     }
+
+    setError('');
     setDlInProgress(true);
-    const storage = getStorage();
-    const wordlistRef = ref(storage, 'worddb.json');
-    getDownloadURL(wordlistRef)
-      .then(function (url: string) {
-        const xhr = new XMLHttpRequest();
-        xhr.responseType = 'json';
-        xhr.onload = async () => {
-          setDlInProgress(false);
-          setValidating(true);
-          return WordDB.validateAndSet(xhr.response).then(() => {
-            setValidating(false);
-            props.onComplete();
-          });
-        };
-        xhr.open('GET', url);
-        xhr.send();
-      })
-      .catch(function () {
+
+    const xhr = new XMLHttpRequest();
+    xhr.responseType = 'json';
+
+    xhr.onload = async (): Promise<void> => {
+      setDlInProgress(false);
+
+      const okStatus = xhr.status >= 200 && xhr.status < 300;
+      const hasJson = xhr.response != null;
+
+      if (!okStatus || !hasJson) {
         setError('Error downloading word list, please try again');
-      });
+        return;
+      }
+
+      setValidating(true);
+      try {
+        await WordDB.validateAndSet(xhr.response);
+        setValidating(false);
+        props.onComplete();
+      } catch {
+        setValidating(false);
+        setError('Downloaded word list but validation failed');
+      }
+    };
+
+    xhr.onerror = (): void => {
+      setDlInProgress(false);
+      setError('Error downloading word list, please try again');
+    };
+
+    // Local-only: served from app/public/worddb.json
+    xhr.open('GET', '/worddb.json');
+    xhr.send();
   };
 
-  if (error) {
+  if (error.length > 0) {
     return <p>Something went wrong: {error}</p>;
-  } else if (dlInProgress || validating) {
+  }
+
+  if (dlInProgress || validating) {
     return (
       <>
         {dlInProgress ? (
@@ -58,6 +74,7 @@ export const LoadButton = (props: {
       </>
     );
   }
+
   return (
     <Button
       className="fontSize1-5em"
@@ -68,10 +85,9 @@ export const LoadButton = (props: {
 };
 
 export const DBLoader = (): React.JSX.Element => {
-  const [ready, error, loading, setLoaded] = useWordDB();
+  const [ready, loadErr, loading, setLoaded] = useWordDB();
 
   if (loading) {
-    // initial loading
     return (
       <div>
         Checking for / validating existing database, this can take a minute...
@@ -79,19 +95,21 @@ export const DBLoader = (): React.JSX.Element => {
     );
   }
 
+  const hasLoadError = loadErr.length > 0;
+
   return (
     <>
       <DefaultTopBar />
       <div className="margin1em">
         <h2>Database Rebuilder</h2>
-        {error ? <p>Error loading existing database.</p> : ''}
+        {hasLoadError ? <p>Error loading existing database.</p> : null}
         {ready ? (
           <p>Found an existing database.</p>
         ) : (
           <p>No existing database found.</p>
         )}
         <LoadButton
-          buttonText={'Build Database'}
+          buttonText="Build Database"
           onComplete={() => {
             setLoaded();
           }}
