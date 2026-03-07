@@ -17,6 +17,12 @@ import {
   numMatchesForEntry,
 } from '../lib/autofillGrid.js';
 import * as BA from '../lib/bitArray.js';
+import {
+  addToBlacklist,
+  getBlacklistArray,
+  isBlacklisted,
+  removeFromBlacklist,
+} from '../lib/blacklist.js';
 import { ExportProps, exportFile } from '../lib/converter.js';
 import { isTextInput } from '../lib/domUtils.js';
 import { entryAndCrossAtPosition, getCrosses, valAt } from '../lib/gridBase.js';
@@ -77,7 +83,6 @@ import { PublishOverlay } from './PublishOverlay.js';
 import { Snackbar, useSnackbar } from './Snackbar.js';
 import { DefaultTopBar, TopBar } from './TopBar.js';
 import { MemoizedTopBarChildren } from './TopBarChildren.js';
-
 export type BuilderProps = PartialBy<
   PuzzleInProgressStrictT,
   | 'clues'
@@ -126,23 +131,55 @@ function PotentialFillRow({
   index,
   style,
   values,
+  onBanWord,
   ...props
 }: RowComponentProps<{
   entryIndex: number;
   dispatch: Dispatch<ClickedFillAction>;
   values: [string, number][];
+  onBanWord: (word: string) => void;
 }>) {
   const value = values[index];
   if (value === undefined) {
     return null;
   }
+
+  const word = value[0];
+
   return (
-    <div style={style}>
-      <PotentialFillItem
-        key={index}
-        entryIndex={props.entryIndex}
-        dispatch={props.dispatch}
-        value={value}
+    <div
+      style={{
+        ...style,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.5rem',
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <PotentialFillItem
+          key={index}
+          entryIndex={props.entryIndex}
+          dispatch={props.dispatch}
+          value={value}
+        />
+      </div>
+      <ButtonReset
+        className={styles.fillItem}
+        onClick={(e: MouseEvent) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          const confirmed = window.confirm(
+            `Ban "${word}" from suggestions and autofill?`
+          );
+
+          if (!confirmed) {
+            return;
+          }
+
+          onBanWord(word);
+        }}
+        text="Ban"
       />
     </div>
   );
@@ -157,17 +194,29 @@ interface PotentialFillListProps {
   dispatch: Dispatch<ClickedFillAction>;
 }
 const PotentialFillList = (props: PotentialFillListProps) => {
+  const [hiddenBlacklistedWords, setHiddenBlacklistedWords] = useState<
+    Set<string>
+  >(new Set<string>());
+
   const listRef = useListRef(null);
   const listParent = useRef<HTMLDivElement>(null);
+
+  const visibleValues = useMemo(() => {
+    return props.values.filter(([word]) => {
+      return !hiddenBlacklistedWords.has(word.trim().toUpperCase());
+    });
+  }, [props.values, hiddenBlacklistedWords]);
+
   useEffect(() => {
-    if (props.values.length === 0) return;
+    if (visibleValues.length === 0) return;
     const list = listRef.current;
     list?.scrollToRow({
       align: 'start',
       behavior: 'instant',
       index: 0,
     });
-  }, [listRef, props.values.length]);
+  }, [listRef, visibleValues.length]);
+
   return (
     <div className={styles.fillListWrapper} data-selected={props.selected}>
       <div className={styles.fillListHeader}>
@@ -180,10 +229,19 @@ const PotentialFillList = (props: PotentialFillListProps) => {
           rowProps={{
             entryIndex: props.entryIndex,
             dispatch: props.dispatch,
-            values: props.values,
+            values: visibleValues,
+            onBanWord: (word: string) => {
+              const normalized = word.trim().toUpperCase();
+              addToBlacklist(normalized);
+              setHiddenBlacklistedWords((prev) => {
+                const next = new Set(prev);
+                next.add(normalized);
+                return next;
+              });
+            },
           }}
           listRef={listRef}
-          rowCount={props.values.length}
+          rowCount={visibleValues.length}
           rowHeight={35}
         />
       </div>
@@ -224,6 +282,46 @@ const initializeState = (props: BuilderProps & AuthProps): BuilderState => {
     userTags: saved?.userTags ?? [],
     symmetry: saved?.symmetry,
   });
+};
+
+const BlacklistManager = () => {
+  const [words, setWords] = useState<string[]>(() => getBlacklistArray());
+
+  const refresh = useCallback(() => {
+    setWords(getBlacklistArray());
+  }, []);
+
+  if (words.length === 0) {
+    return <div>No blacklisted words.</div>;
+  }
+
+  return (
+    <div>
+      {words.map((word) => (
+        <div
+          key={word}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.5rem',
+            marginBottom: '0.25rem',
+          }}
+        >
+          <span>{word}</span>
+          <ButtonReset
+            className={styles.fillItem}
+            onClick={(e: MouseEvent) => {
+              e.preventDefault();
+              removeFromBlacklist(word);
+              refresh();
+            }}
+            text="Unban"
+          />
+        </div>
+      ))}
+    </div>
+  );
 };
 
 export const Builder = (
@@ -488,6 +586,7 @@ export const Builder = (
       />
     );
   }
+
   return (
     <GridMode
       getMostConstrainedEntry={getMostConstrainedEntry}
@@ -570,6 +669,9 @@ const potentialFill = (
     WordDB.matchingBitmap(pattern)
   );
   return matches.filter(([word]) => {
+    if (isBlacklisted(word)) {
+      return false;
+    }
     let j = -1;
     for (const [i, cellPos] of entry.cells.entries()) {
       j += 1;
@@ -735,6 +837,7 @@ const GridMode = ({
     false
   );
   const [pickingHighlightColor, setPickingHighlightColor] = useState(false);
+  const [showBlacklistManager, setShowBlacklistManager] = useState(false);
   const [highlightColor, setHighlightColor] = useState(PRIMARY);
   const { showSnackbar } = useSnackbar();
 
@@ -1059,6 +1162,18 @@ const GridMode = ({
         ) : (
           ''
         )}
+        {showBlacklistManager ? (
+          <Overlay
+            closeCallback={() => {
+              setShowBlacklistManager(false);
+            }}
+          >
+            <h2>Blacklisted Words</h2>
+            <BlacklistManager />
+          </Overlay>
+        ) : (
+          ''
+        )}
         {state.showDownloadLink ? (
           <PuzDownloadOverlay
             state={state}
@@ -1090,6 +1205,14 @@ const GridMode = ({
         ) : (
           ''
         )}
+        <div className="flexNone marginBottom1em">
+          <Button
+            onClick={() => {
+              setShowBlacklistManager(true);
+            }}
+            text="Manage Blacklist"
+          />
+        </div>
         <div className={styles.squareAndColsWrap}>
           <SquareAndCols
             leftIsActive={state.active.dir === Direction.Across}
