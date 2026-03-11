@@ -222,7 +222,7 @@ export function ConstructOrUploadPage({ isUpload }: { isUpload: boolean }) {
         <title>
           {isUpload
             ? `Upload/Import Crossword Puzzles | Crosshare`
-            : `Constructor | Crosshare | crossword puzzle builder`}
+            : `**LOCAL** Constructor | Crosshare | crossword puzzle builder`}
         </title>
         <meta
           key="og:title"

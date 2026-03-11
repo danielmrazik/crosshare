@@ -8,6 +8,7 @@ import {
   stableSubsets,
 } from './autofillGrid.js';
 import * as BA from './bitArray.js';
+import { isBlacklisted } from './blacklist.js';
 import { getCrosses, valAt } from './gridBase.js';
 
 enum ResultTag {
@@ -212,6 +213,9 @@ export class Autofiller {
         entry.length,
         entry.bitmap
       )) {
+        if (isBlacklisted(word)) {
+          continue;
+        }
         if (pitched.has(entry.index + ':' + word)) {
           continue;
         }

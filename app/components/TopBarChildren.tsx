@@ -661,6 +661,7 @@ interface TopBarChildrenProps {
   setMuted: (val: boolean) => void;
   toggleKeyboard: boolean;
   setToggleKeyboard: (val: boolean) => void;
+  openBlacklistManager: () => void;
 }
 
 const TopBarChildren = (props: TopBarChildrenProps) => {
@@ -678,6 +679,7 @@ const TopBarChildren = (props: TopBarChildrenProps) => {
     usedHighlightColors,
     stats,
     builderState,
+    openBlacklistManager,
   } = props;
   let autofillIcon = <SpinnerDisabled />;
   let autofillReverseIcon = <SpinnerWorking />;
@@ -699,6 +701,13 @@ const TopBarChildren = (props: TopBarChildrenProps) => {
   }
   return (
     <>
+      <TopBarLink
+        icon={<FaHammer />}
+        text="Blacklist"
+        onClick={() => {
+          openBlacklistManager();
+        }}
+      />
       <TopBarDropDown
         contentWidth={340}
         icon={autofillIcon}

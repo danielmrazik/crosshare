@@ -19,9 +19,10 @@ import {
 import * as BA from '../lib/bitArray.js';
 import {
   addToBlacklist,
+  getBlacklist,
   getBlacklistArray,
-  isBlacklisted,
   removeFromBlacklist,
+  saveBlacklist,
 } from '../lib/blacklist.js';
 import { ExportProps, exportFile } from '../lib/converter.js';
 import { isTextInput } from '../lib/domUtils.js';
@@ -163,9 +164,16 @@ function PotentialFillRow({
           value={value}
         />
       </div>
-      <ButtonReset
-        className={styles.fillItem}
-        onClick={(e: MouseEvent) => {
+      <button
+        type="button"
+        style={{
+          flex: '0 0 auto',
+          padding: '2px 8px',
+          fontSize: '0.8rem',
+          lineHeight: 1.2,
+          cursor: 'pointer',
+        }}
+        onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
 
@@ -179,8 +187,9 @@ function PotentialFillRow({
 
           onBanWord(word);
         }}
-        text="Ban"
-      />
+      >
+        Ban
+      </button>
     </div>
   );
 }
@@ -286,40 +295,169 @@ const initializeState = (props: BuilderProps & AuthProps): BuilderState => {
 
 const BlacklistManager = () => {
   const [words, setWords] = useState<string[]>(() => getBlacklistArray());
+  const [newWord, setNewWord] = useState('');
+  const [bulkWords, setBulkWords] = useState('');
 
   const refresh = useCallback(() => {
     setWords(getBlacklistArray());
   }, []);
 
-  if (words.length === 0) {
-    return <div>No blacklisted words.</div>;
-  }
+  const addWord = useCallback(() => {
+    const normalized = newWord.trim().toUpperCase();
+    if (!normalized) {
+      return;
+    }
+    if (words.includes(normalized)) {
+      setNewWord('');
+      return;
+    }
+    addToBlacklist(normalized);
+    setNewWord('');
+    refresh();
+  }, [newWord, words, refresh]);
+
+  const addBulkWords = useCallback(() => {
+    const parsed = bulkWords
+      .split(/\r?\n|,|\t| /)
+      .map((word) => word.trim().toUpperCase())
+      .filter(Boolean);
+
+    if (parsed.length === 0) {
+      return;
+    }
+
+    const merged = new Set<string>(words);
+    for (const word of parsed) {
+      merged.add(word);
+    }
+
+    saveBlacklist(merged);
+    setBulkWords('');
+    refresh();
+  }, [bulkWords, words, refresh]);
+
+  const copyBlacklist = useCallback(async () => {
+    const text = words.join('\n');
+
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (err) {
+      console.error('Clipboard copy failed:', err);
+      alert('Copy failed. Your browser may not support clipboard access.');
+    }
+  }, [words]);
+
+  const downloadBlacklist = useCallback(() => {
+    const text = words.join('\n');
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'blacklist.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [words]);
 
   return (
     <div>
-      {words.map((word) => (
+      <div
+        style={{
+          display: 'flex',
+          gap: '0.5rem',
+          marginBottom: '1rem',
+          alignItems: 'center',
+        }}
+      >
+        <input
+          type="text"
+          value={newWord}
+          placeholder="Add one word"
+          onChange={(e) => {
+            setNewWord(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addWord();
+            }
+          }}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            padding: '6px 8px',
+          }}
+        />
+        <Button onClick={addWord} text="Add" />
+      </div>
+
+      <div style={{ marginBottom: '1rem' }}>
+        <textarea
+          value={bulkWords}
+          placeholder="Bulk add words: paste words separated by new lines, commas, spaces, or tabs"
+          onChange={(e) => {
+            setBulkWords(e.target.value);
+          }}
+          style={{
+            width: '100%',
+            minHeight: '120px',
+            padding: '8px',
+            resize: 'vertical',
+            boxSizing: 'border-box',
+          }}
+        />
         <div
-          key={word}
           style={{
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
             gap: '0.5rem',
-            marginBottom: '0.25rem',
+            marginTop: '0.5rem',
+            flexWrap: 'wrap',
           }}
         >
-          <span>{word}</span>
-          <ButtonReset
-            className={styles.fillItem}
-            onClick={(e: MouseEvent) => {
-              e.preventDefault();
-              removeFromBlacklist(word);
-              refresh();
+          <Button onClick={addBulkWords} text="Bulk Add" />
+          <Button
+            onClick={() => {
+              void copyBlacklist();
             }}
-            text="Unban"
+            text="Copy All"
           />
+          <Button onClick={downloadBlacklist} text="Export .txt" />
         </div>
-      ))}
+      </div>
+
+      {words.length === 0 ? (
+        <div>No blacklisted words.</div>
+      ) : (
+        <div>
+          <div style={{ marginBottom: '0.5rem' }}>
+            <strong>Total:</strong> {words.length}
+          </div>
+          {words.map((word) => (
+            <div
+              key={word}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.5rem',
+                marginBottom: '0.25rem',
+              }}
+            >
+              <span>{word}</span>
+              <ButtonReset
+                className={styles.fillItem}
+                onClick={(e: MouseEvent) => {
+                  e.preventDefault();
+                  removeFromBlacklist(word);
+                  refresh();
+                }}
+                text="Unban"
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -481,7 +619,13 @@ export const Builder = (
     worker.current.postMessage(autofill);
   }, [state.grid, autofillEnabled, setAutofilledGrid, setAutofillInProgress]);
   useEffect(() => {
-    runAutofill();
+    const timeout = window.setTimeout(() => {
+      runAutofill();
+    }, 120);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
   }, [runAutofill]);
 
   useEffect(() => {
@@ -668,8 +812,10 @@ const potentialFill = (
     pattern.length,
     WordDB.matchingBitmap(pattern)
   );
+  const blacklist = getBlacklist();
+
   return matches.filter(([word]) => {
-    if (isBlacklisted(word)) {
+    if (blacklist.has(word.trim().toUpperCase())) {
       return false;
     }
     let j = -1;
@@ -927,8 +1073,8 @@ const GridMode = ({
     let left = <></>;
     let right = <></>;
     const [entry, cross] = entryAndCrossAtPosition(state.grid, state.active);
-    let crossMatches = cross && potentialFill(cross, state.grid);
-    let entryMatches = entry && potentialFill(entry, state.grid);
+    let crossMatches = cross && potentialFill(cross, state.grid).slice(0, 1000);
+    let entryMatches = entry && potentialFill(entry, state.grid).slice(0, 1000);
 
     if (
       crossMatches !== null &&
@@ -1129,6 +1275,9 @@ const GridMode = ({
               setMuted={setMuted}
               toggleKeyboard={toggleKeyboard}
               setToggleKeyboard={setToggleKeyboard}
+              openBlacklistManager={() => {
+                setShowBlacklistManager(true);
+              }}
             />
           </TopBar>
         </div>
@@ -1205,14 +1354,6 @@ const GridMode = ({
         ) : (
           ''
         )}
-        <div className="flexNone marginBottom1em">
-          <Button
-            onClick={() => {
-              setShowBlacklistManager(true);
-            }}
-            text="Manage Blacklist"
-          />
-        </div>
         <div className={styles.squareAndColsWrap}>
           <SquareAndCols
             leftIsActive={state.active.dir === Direction.Across}
