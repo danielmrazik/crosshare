@@ -1,91 +1,29 @@
-import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import {
-  Timestamp as FBTimestamp,
-  Query,
-  getFirestore,
-} from 'firebase-admin/firestore';
-import * as t from 'io-ts';
-import cloneDeepWith from 'lodash/cloneDeepWith.js';
-import { firebaseConfig as firebaseEmulatorConfig } from '../firebaseConfig.emulators.js';
-import { firebaseConfig } from '../firebaseConfig.js';
-import { PathReporter } from './pathReporter.js';
-import { isTimestamp } from './timestamp.js';
+/* Firebase Admin disabled for local constructor-only build */
 
-export function getAdminApp() {
-  const app = getApps()[0];
-  if (app) {
-    return app;
+type Noop = (...args: unknown[]) => unknown;
+
+/* universal chainable proxy */
+const proxy: Record<string, Noop> = new Proxy(
+  {},
+  {
+    get: () => () => proxy,
   }
-  if (process.env.NEXT_PUBLIC_USE_EMULATORS) {
-    console.log('Initializing admin app for emulators');
-    return initializeApp(firebaseEmulatorConfig);
-  }
-  return initializeApp({
-    ...firebaseConfig,
-    credential: applicationDefault(),
+);
+
+/* ---- admin stubs ---- */
+
+export const getAdminApp = (): unknown => proxy;
+export const getAdminAuth = (): unknown => proxy;
+export const getAdminFirestore = (): unknown => proxy;
+export const getAdminStorage = (): unknown => proxy;
+
+export const verifyIdToken = () =>
+  Promise.resolve({
+    uid: 'local-dev',
   });
-}
 
-export const getUser = (userId: string) =>
-  getAuth(getAdminApp()).getUser(userId);
+/* ---- firestore query helpers ---- */
 
-let OVERRIDE_FIRESTORE: FirebaseFirestore.Firestore | null = null;
-export function overrideFirestore(f: FirebaseFirestore.Firestore | null) {
-  OVERRIDE_FIRESTORE = f;
-}
+export const getCollection = (): unknown => proxy;
 
-export const firestore = () =>
-  OVERRIDE_FIRESTORE || getFirestore(getAdminApp());
-
-let OVERRIDE_TO_FIRESTORE: ((data: unknown) => Record<string, unknown>) | null;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const toFirestore = (data: any): Record<string, unknown> => {
-  if (OVERRIDE_TO_FIRESTORE) {
-    return OVERRIDE_TO_FIRESTORE(data);
-  }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-  return cloneDeepWith(data, (val) => {
-    if (isTimestamp(val)) {
-      return FBTimestamp.fromMillis(val.toMillis());
-    }
-    return undefined;
-  });
-};
-
-export function overrideToFirestore(
-  c: ((data: unknown) => Record<string, unknown>) | null
-) {
-  OVERRIDE_TO_FIRESTORE = c;
-}
-
-export const getCollection = (c: string) => {
-  const db = firestore();
-  return db.collection(c).withConverter({
-    toFirestore: toFirestore,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    fromFirestore: (s: any) => s.data(),
-  });
-};
-
-export async function mapEachResult<N, A>(
-  query: Query,
-  validator: t.Decoder<unknown, A>,
-  mapper: (val: A, docid: string) => N
-): Promise<N[]> {
-  const value = await query.get();
-  const results: N[] = [];
-  for (const doc of value.docs) {
-    const data = doc.data();
-    const validationResult = validator.decode(data);
-    if (validationResult._tag === 'Right') {
-      results.push(mapper(validationResult.right, doc.id));
-    } else {
-      console.error('bad doc: ', doc.id);
-      console.error(PathReporter.report(validationResult).join(','));
-      return Promise.reject(new Error('Malformed content'));
-    }
-  }
-  return results;
-}
+export const mapEachResult = (): unknown[] => [];

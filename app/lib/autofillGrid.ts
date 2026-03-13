@@ -1,5 +1,6 @@
 import { matchingBitmap, minCost, numMatches, updateBitmap } from './WordDB.js';
 import * as BA from './bitArray.js';
+import { getBlacklist } from './blacklist.js';
 import {
   EntryBase,
   EntryWithPattern,
@@ -43,6 +44,10 @@ export function gridWithEntryDecided(
   word: string,
   cost: number
 ): AutofillGrid | null {
+  const blacklist = getBlacklist();
+  if (blacklist.has(word.trim().toUpperCase())) {
+    return null;
+  }
   const newGrid: AutofillGrid = {
     ...grid,
     usedWords: new Set(grid.usedWords),
@@ -224,10 +229,19 @@ export function fromTemplate(
     hBars
   );
 
+  const blacklist = getBlacklist();
+
   const entries = baseEntries.map((baseEntry) => {
     if (baseEntry.completedWord) {
-      usedWords.add(baseEntry.completedWord);
+      const word = baseEntry.completedWord.trim().toUpperCase();
+
+      if (blacklist.has(word)) {
+        baseEntry.completedWord = null;
+      } else {
+        usedWords.add(word);
+      }
     }
+
     return addAutofillFieldsToEntry(baseEntry);
   });
 

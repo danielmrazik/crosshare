@@ -19,12 +19,16 @@ export interface AuthContextValue {
 }
 
 export const AuthContext = createContext<AuthContextValue>({
-  user: undefined,
-  isAdmin: false,
+  user: {
+    uid: 'local-dev',
+    displayName: 'Local Constructor',
+    isAnonymous: false,
+  } as unknown as User,
+  isAdmin: true,
   isPatron: false,
   isMod: false,
   loading: false,
-  error: 'using default context',
+  notifications: [],
   constructorPage: undefined,
-  prefs: undefined,
+  prefs: {},
 });

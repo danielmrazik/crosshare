@@ -203,18 +203,10 @@ interface PotentialFillListProps {
   dispatch: Dispatch<ClickedFillAction>;
 }
 const PotentialFillList = (props: PotentialFillListProps) => {
-  const [hiddenBlacklistedWords, setHiddenBlacklistedWords] = useState<
-    Set<string>
-  >(new Set<string>());
-
   const listRef = useListRef(null);
   const listParent = useRef<HTMLDivElement>(null);
 
-  const visibleValues = useMemo(() => {
-    return props.values.filter(([word]) => {
-      return !hiddenBlacklistedWords.has(word.trim().toUpperCase());
-    });
-  }, [props.values, hiddenBlacklistedWords]);
+  const visibleValues = props.values;
 
   useEffect(() => {
     if (visibleValues.length === 0) return;
@@ -242,11 +234,6 @@ const PotentialFillList = (props: PotentialFillListProps) => {
             onBanWord: (word: string) => {
               const normalized = word.trim().toUpperCase();
               addToBlacklist(normalized);
-              setHiddenBlacklistedWords((prev) => {
-                const next = new Set(prev);
-                next.add(normalized);
-                return next;
-              });
             },
           }}
           listRef={listRef}
@@ -297,6 +284,7 @@ const BlacklistManager = () => {
   const [words, setWords] = useState<string[]>(() => getBlacklistArray());
   const [newWord, setNewWord] = useState('');
   const [bulkWords, setBulkWords] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
 
   const refresh = useCallback(() => {
     setWords(getBlacklistArray());
@@ -336,15 +324,12 @@ const BlacklistManager = () => {
     refresh();
   }, [bulkWords, words, refresh]);
 
-  const copyBlacklist = useCallback(async () => {
+  const copyBlacklist = useCallback((): void => {
     const text = words.join('\n');
 
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch (err) {
+    navigator.clipboard.writeText(text).catch((err: unknown) => {
       console.error('Clipboard copy failed:', err);
-      alert('Copy failed. Your browser may not support clipboard access.');
-    }
+    });
   }, [words]);
 
   const downloadBlacklist = useCallback(() => {
@@ -359,6 +344,14 @@ const BlacklistManager = () => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }, [words]);
+
+  const filteredWords = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toUpperCase();
+    if (!normalizedSearch) {
+      return words;
+    }
+    return words.filter((word) => word.includes(normalizedSearch));
+  }, [words, searchTerm]);
 
   return (
     <div>
@@ -416,14 +409,25 @@ const BlacklistManager = () => {
           }}
         >
           <Button onClick={addBulkWords} text="Bulk Add" />
-          <Button
-            onClick={() => {
-              void copyBlacklist();
-            }}
-            text="Copy All"
-          />
+          <Button onClick={copyBlacklist} text="Copy All" />
           <Button onClick={downloadBlacklist} text="Export .txt" />
         </div>
+      </div>
+
+      <div style={{ marginBottom: '1rem' }}>
+        <input
+          type="text"
+          value={searchTerm}
+          placeholder="Search blacklist"
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+          }}
+          style={{
+            width: '100%',
+            padding: '6px 8px',
+            boxSizing: 'border-box',
+          }}
+        />
       </div>
 
       {words.length === 0 ? (
@@ -432,30 +436,45 @@ const BlacklistManager = () => {
         <div>
           <div style={{ marginBottom: '0.5rem' }}>
             <strong>Total:</strong> {words.length}
+            {' · '}
+            <strong>Showing:</strong> {filteredWords.length}
           </div>
-          {words.map((word) => (
-            <div
-              key={word}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '0.5rem',
-                marginBottom: '0.25rem',
-              }}
-            >
-              <span>{word}</span>
-              <ButtonReset
-                className={styles.fillItem}
-                onClick={(e: MouseEvent) => {
-                  e.preventDefault();
-                  removeFromBlacklist(word);
-                  refresh();
+          {filteredWords.length === 0 ? (
+            <div>No matches found.</div>
+          ) : (
+            filteredWords.map((word) => (
+              <div
+                key={word}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.5rem',
+                  marginBottom: '0.25rem',
                 }}
-                text="Unban"
-              />
-            </div>
-          ))}
+              >
+                <span style={{ fontFamily: 'monospace', minWidth: '120px' }}>
+                  {word}
+                </span>
+                <button
+                  type="button"
+                  style={{
+                    padding: '2px 8px',
+                    fontSize: '0.8rem',
+                    lineHeight: 1.2,
+                    cursor: 'pointer',
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    removeFromBlacklist(word);
+                    refresh();
+                  }}
+                >
+                  Unban
+                </button>
+              </div>
+            ))
+          )}
         </div>
       )}
     </div>
@@ -786,15 +805,23 @@ const potentialFill = (
   entry: ViewableEntry,
   grid: BuilderGrid
 ): [string, number][] => {
+  const blacklist = getBlacklist();
+
+  if (entry.completedWord) {
+    const word = entry.completedWord.trim().toUpperCase();
+    if (blacklist.has(word)) {
+      return [];
+    }
+  }
+
   let pattern = '';
   const crosses = getCrosses(grid, entry);
+
   for (const [index, cell] of entry.cells.entries()) {
     const val = valAt(grid, cell);
     const cross = crosses[index];
-    if (cross === undefined) {
-      throw new Error('bad cross');
-    }
-    // If complete, remove any cells whose crosses aren't complete and show that
+    if (!cross) throw new Error('bad cross');
+
     if (
       entry.completedWord &&
       val.length === 1 &&
@@ -806,59 +833,66 @@ const potentialFill = (
       pattern += val;
     }
   }
+
   const successLetters = new Array<string>(entry.cells.length).fill('');
   const failLetters = new Array<string>(entry.cells.length).fill('');
+
   const matches = WordDB.matchingWords(
     pattern.length,
     WordDB.matchingBitmap(pattern)
   );
-  const blacklist = getBlacklist();
 
-  return matches.filter(([word]) => {
-    if (blacklist.has(word.trim().toUpperCase())) {
+  const filtered = matches.filter(([word]) => {
+    const normalized = word.trim().toUpperCase();
+
+    if (blacklist.has(normalized)) {
       return false;
     }
+
     let j = -1;
+
     for (const [i, cellPos] of entry.cells.entries()) {
       j += 1;
+
       const cell = valAt(grid, cellPos);
+
       if (cell.length > 1) {
-        // Handle rebuses
         j += cell.length - 1;
         continue;
       }
+
       if (!entry.completedWord && cell !== ' ') {
         continue;
       }
+
       const letter = word[j];
       if (letter === undefined) {
         throw new Error('out of bounds on ' + word);
       }
-      if (successLetters[i]?.includes(letter)) {
-        continue;
-      }
-      if (failLetters[i]?.includes(letter)) {
-        return false;
-      }
+
+      if (successLetters[i]?.includes(letter)) continue;
+      if (failLetters[i]?.includes(letter)) return false;
+
       const crossObj = crosses[i];
-      if (crossObj === undefined) {
-        throw new Error('bad crosses');
-      }
+      if (!crossObj) throw new Error('bad crosses');
+
       const crossIndex = crossObj.entryIndex;
+
       if (crossIndex === null) {
         successLetters[i] += letter;
         continue;
       }
+
       const cross = grid.entries[crossIndex];
-      if (cross === undefined) {
-        throw new Error('bad cross index');
-      }
+      if (!cross) throw new Error('bad cross index');
+
       if (cross.completedWord) {
         successLetters[i] += letter;
         continue;
       }
 
       let crossPattern = '';
+
       for (const crossCell of cross.cells) {
         if (crossCell.row === cellPos.row && crossCell.col === cellPos.col) {
           crossPattern += letter;
@@ -866,7 +900,9 @@ const potentialFill = (
           crossPattern += valAt(grid, crossCell);
         }
       }
+
       const newBitmap = WordDB.matchingBitmap(crossPattern);
+
       if (!newBitmap || BA.isZero(newBitmap)) {
         failLetters[i] += letter;
         return false;
@@ -874,7 +910,12 @@ const potentialFill = (
         successLetters[i] += letter;
       }
     }
+
     return true;
+  });
+
+  return filtered.filter(([word]) => {
+    return !blacklist.has(word.trim().toUpperCase());
   });
 };
 
@@ -933,17 +974,11 @@ const PuzDownloadOverlay = (props: {
           w={props.state.grid.width}
           h={props.state.grid.height}
           g={props.state.grid.cells}
-          n={props.state.authorName}
-          t={props.state.title || 'Crosshare puzzle'}
-          sty={Object.fromEntries(
-            Array.from(props.state.grid.cellStyles.entries()).map(([k, v]) => [
-              k,
-              Array.from(v),
-            ])
-          )}
-          hdn={Array.from(props.state.grid.hidden)}
-          cn={props.state.notes ?? undefined}
-          gc={props.state.guestConstructor ?? undefined}
+          n="Crosswoods"
+          t="yyyy.mm.dd"
+          cn={`Crosswoods
+            heycrosswoods@gmail.com
+            https://heycrosswoods.com`}
           {...getClueProps(
             props.state.grid.sortedEntries,
             props.state.grid.entries,
@@ -986,6 +1021,16 @@ const GridMode = ({
   const [showBlacklistManager, setShowBlacklistManager] = useState(false);
   const [highlightColor, setHighlightColor] = useState(PRIMARY);
   const { showSnackbar } = useSnackbar();
+  const [manualBanWord, setManualBanWord] = useState('');
+
+  const submitManualBan = () => {
+    const word = manualBanWord.trim().toUpperCase();
+
+    if (!word) return;
+
+    addToBlacklist(word);
+    setManualBanWord('');
+  };
 
   const usedHighlightColors = useMemo(() => {
     return Array.from(state.grid.cellStyles.keys()).filter(
@@ -1355,6 +1400,28 @@ const GridMode = ({
           ''
         )}
         <div className={styles.squareAndColsWrap}>
+          <div style={{ margin: '8px 0', display: 'flex', gap: '6px' }}>
+            <input
+              type="text"
+              placeholder="Add word to blacklist"
+              value={manualBanWord}
+              onChange={(e) => {
+                setManualBanWord(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitManualBan();
+                }
+              }}
+              style={{
+                padding: '4px 6px',
+                fontSize: '0.9rem',
+                width: '160px',
+              }}
+            />
+            <Button onClick={submitManualBan} text="Ban" />
+          </div>
           <SquareAndCols
             leftIsActive={state.active.dir === Direction.Across}
             aspectRatio={state.grid.width / state.grid.height}

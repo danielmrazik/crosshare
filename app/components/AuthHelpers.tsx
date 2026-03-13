@@ -92,20 +92,14 @@ export function requiresAuth<T extends AuthPropsOptional>(
   return function AuthRequired(
     props: Omit<T, keyof AuthPropsOptional>
   ): ReactNode {
-    const ctx = useContext(AuthContext);
-    const login = renderLoginIfNeeded(ctx);
-    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
-    if (login) {
-      return login;
-    }
+    const fakeUser = {
+      uid: 'local-dev',
+      displayName: 'Local Constructor',
+      isAnonymous: false,
+    } as unknown as User;
+
     return (
-      <WrappedComponent
-        {...(props as T)}
-        isAdmin={ctx.isAdmin}
-        user={ctx.user}
-        constructorPage={ctx.constructorPage}
-        prefs={ctx.prefs}
-      />
+      <WrappedComponent {...(props as T)} isAdmin={true} user={fakeUser} />
     );
   };
 }
