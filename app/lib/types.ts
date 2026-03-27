@@ -413,6 +413,7 @@ export const PuzzleInProgressV = t.intersection([
   t.partial({
     /* New format for circles / shading */
     cellStyles: t.record(t.string, t.array(t.number)),
+    reviewedPotentialRepeats: t.array(t.string),
     /* This is the legacy way of supporting circles / shading */
     highlighted: t.array(t.number),
     highlight: t.keyof({ circle: null, shade: null }),

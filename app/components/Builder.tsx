@@ -3,6 +3,7 @@ import type { User } from 'firebase/auth';
 import {
   Dispatch,
   MouseEvent,
+  SetStateAction,
   useCallback,
   useEffect,
   useMemo,
@@ -48,7 +49,7 @@ import {
   isAutofillResultMessage,
 } from '../lib/types.js';
 import { STORAGE_KEY, eqSet } from '../lib/utils.js';
-import { ViewableEntry } from '../lib/viewableGrid.js';
+import { ViewableEntry, entryString } from '../lib/viewableGrid.js';
 import { getAutofillWorker } from '../lib/workerLoader.js';
 import {
   BuilderGrid,
@@ -485,6 +486,9 @@ const BlacklistManager = ({ onChange }: { onChange?: () => void }) => {
 export const Builder = (
   props: BuilderProps & AuthProps & { isUpload?: boolean }
 ): React.JSX.Element => {
+  const [savedInProgress] = useState<PuzzleInProgressT | null>(() =>
+    fromLocalStorage(STORAGE_KEY, PuzzleInProgressV)
+  );
   const [firstLaunch, setFirstLaunch] = useState(false);
 
   useEffect(() => {
@@ -497,6 +501,13 @@ export const Builder = (
 
   const [autofilledGrid, setAutofilledGrid] = useState<string[]>([]);
   const [autofillInProgress, setAutofillInProgress] = useState(false);
+  const [reviewedPotentialRepeatKeys, setReviewedPotentialRepeatKeys] =
+    useState<Set<string>>(() => {
+      const reviewedPotentialRepeats: string[] =
+        (savedInProgress?.reviewedPotentialRepeats as string[] | undefined) ??
+        [];
+      return new Set<string>(reviewedPotentialRepeats);
+    });
 
   const getMostConstrainedEntry: () => number | null = useCallback(() => {
     if (!WordDB.wordDB) {
@@ -715,6 +726,7 @@ export const Builder = (
       contestHasPrize: state.isContestPuzzle
         ? state.contestHasPrize
         : undefined,
+      reviewedPotentialRepeats: Array.from(reviewedPotentialRepeatKeys),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(inProgress));
   }, [
@@ -740,6 +752,7 @@ export const Builder = (
     state.isContestPuzzle,
     state.contestAnswers,
     state.contestHasPrize,
+    reviewedPotentialRepeatKeys,
   ]);
 
   const reRunAutofill = useCallback(() => {
@@ -799,6 +812,8 @@ export const Builder = (
       state={state}
       dispatch={dispatch}
       setClueMode={setClueMode}
+      reviewedPotentialRepeatKeys={reviewedPotentialRepeatKeys}
+      setReviewedPotentialRepeatKeys={setReviewedPotentialRepeatKeys}
     />
   );
 };
@@ -985,6 +1000,149 @@ const potentialFill = (
   });
 };
 
+interface PotentialRepeatOccurrence {
+  entryIndex: number;
+  entryLabel: string;
+  entryFill: string;
+  startIndex: number;
+  endIndex: number;
+}
+
+interface PotentialRepeat {
+  word: string;
+  occurrences: PotentialRepeatOccurrence[];
+}
+
+const potentialRepeatKey = (repeat: PotentialRepeat): string => {
+  return JSON.stringify({
+    word: repeat.word,
+    occurrences: repeat.occurrences
+      .map((occurrence) => ({
+        entryIndex: occurrence.entryIndex,
+        startIndex: occurrence.startIndex,
+        endIndex: occurrence.endIndex,
+      }))
+      .sort((a, b) => {
+        return (
+          a.entryIndex - b.entryIndex ||
+          a.startIndex - b.startIndex ||
+          a.endIndex - b.endIndex
+        );
+      }),
+  });
+};
+
+const typedLetterAtIndex = (cells: string[], index: number): string | null => {
+  const value = cells[index]?.trim().toUpperCase();
+  if (!value || !/^[A-Z]$/.test(value)) {
+    return null;
+  }
+  return value;
+};
+
+const getPotentialRepeats = (grid: BuilderGrid): PotentialRepeat[] => {
+  const occurrencesByWord = new Map<string, PotentialRepeatOccurrence[]>();
+  const wordSetsByLength = new Map<number, Set<string>>();
+
+  const hasWord = (word: string): boolean => {
+    let wordsForLength = wordSetsByLength.get(word.length);
+    if (!wordsForLength) {
+      wordsForLength = new Set<string>(
+        (WordDB.wordDB?.words[word.length] ?? []).map(
+          ([candidate]) => candidate
+        )
+      );
+      wordSetsByLength.set(word.length, wordsForLength);
+    }
+    return wordsForLength.has(word);
+  };
+
+  for (const entry of grid.entries) {
+    const letters = entry.cells.map((cell) =>
+      typedLetterAtIndex(grid.cells, cell.row * grid.width + cell.col)
+    );
+
+    let runStart = 0;
+    while (runStart < letters.length) {
+      while (runStart < letters.length && letters[runStart] === null) {
+        runStart += 1;
+      }
+      if (runStart >= letters.length) {
+        break;
+      }
+
+      let runEnd = runStart;
+      while (runEnd < letters.length && letters[runEnd] !== null) {
+        runEnd += 1;
+      }
+
+      if (runEnd - runStart >= 3) {
+        for (let start = runStart; start <= runEnd - 3; start += 1) {
+          let word = '';
+          for (let end = start; end < runEnd; end += 1) {
+            const letter = letters[end];
+            if (letter === null) {
+              break;
+            }
+            word += letter;
+            if (word.length < 3 || !hasWord(word)) {
+              continue;
+            }
+
+            const occurrences = occurrencesByWord.get(word) ?? [];
+            occurrences.push({
+              entryIndex: entry.index,
+              entryLabel: entryString(entry),
+              entryFill: letters
+                .map((letter) => {
+                  return letter ?? ' ';
+                })
+                .join(''),
+              startIndex: start,
+              endIndex: end,
+            });
+            occurrencesByWord.set(word, occurrences);
+          }
+        }
+      }
+
+      runStart = runEnd + 1;
+    }
+  }
+
+  const repeated = Array.from(occurrencesByWord.entries())
+    .filter(([_word, occurrences]) => occurrences.length > 1)
+    .map(([word, occurrences]) => ({
+      word,
+      occurrences: occurrences.sort((a, b) => {
+        return (
+          a.entryLabel.localeCompare(b.entryLabel, undefined, {
+            numeric: true,
+          }) || a.startIndex - b.startIndex
+        );
+      }),
+    }))
+    .sort(
+      (a, b) => b.word.length - a.word.length || a.word.localeCompare(b.word)
+    );
+
+  return repeated.filter((candidate) => {
+    return !candidate.occurrences.every((occurrence) =>
+      repeated.some((other) => {
+        if (other.word.length <= candidate.word.length) {
+          return false;
+        }
+        return other.occurrences.some(
+          (otherOccurrence) =>
+            otherOccurrence.entryIndex === occurrence.entryIndex &&
+            otherOccurrence.startIndex <= occurrence.startIndex &&
+            otherOccurrence.endIndex >= occurrence.endIndex
+        );
+      })
+    );
+  });
+};
+
 const PuzDownloadLink = (props: ExportProps) => {
   const [dataURI, setDataURI] = useState('');
   const [error, setError] = useState('');
@@ -1017,6 +1175,18 @@ const PuzDownloadLink = (props: ExportProps) => {
   );
 };
 
+const upcomingSundayString = (): string => {
+  const date = new Date();
+  const daysUntilSunday = (7 - date.getDay()) % 7;
+  date.setDate(date.getDate() + daysUntilSunday);
+
+  const year = date.getFullYear().toString();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+
+  return `${year}${month}${day}`;
+};
+
 const PuzDownloadOverlay = (props: {
   state: BuilderState;
   cancel: () => void;
@@ -1047,7 +1217,7 @@ const PuzDownloadOverlay = (props: {
           //   heycrosswoods@gmail.com
           //   https://heycrosswoods.com`}
           n=""
-          t=""
+          t={upcomingSundayString()}
           {...getClueProps(
             props.state.grid.sortedEntries,
             props.state.grid.entries,
@@ -1072,6 +1242,8 @@ interface GridModeProps {
   dispatch: Dispatch<PuzzleAction>;
   setClueMode: (val: boolean) => void;
   getMostConstrainedEntry: () => number | null;
+  reviewedPotentialRepeatKeys: Set<string>;
+  setReviewedPotentialRepeatKeys: Dispatch<SetStateAction<Set<string>>>;
 }
 const GridMode = ({
   getMostConstrainedEntry,
@@ -1079,6 +1251,8 @@ const GridMode = ({
   state,
   dispatch,
   setClueMode,
+  reviewedPotentialRepeatKeys,
+  setReviewedPotentialRepeatKeys,
   ...props
 }: GridModeProps) => {
   const [muted, setMuted] = usePersistedBoolean('muted', true);
@@ -1088,6 +1262,7 @@ const GridMode = ({
   );
   const [pickingHighlightColor, setPickingHighlightColor] = useState(false);
   const [showBlacklistManager, setShowBlacklistManager] = useState(false);
+  const [showPotentialRepeats, setShowPotentialRepeats] = useState(false);
   const [highlightColor, setHighlightColor] = useState(PRIMARY);
   const { showSnackbar } = useSnackbar();
   const [manualBanWord, setManualBanWord] = useState('');
@@ -1292,6 +1467,51 @@ const GridMode = ({
     return { left, right };
   }, [state.grid, state.active, dispatch, banWord, blacklistWords]);
 
+  const potentialRepeats = useMemo(
+    () => getPotentialRepeats(state.grid),
+    [state.grid]
+  );
+  const potentialRepeatKeys = useMemo(
+    () => new Set(potentialRepeats.map((repeat) => potentialRepeatKey(repeat))),
+    [potentialRepeats]
+  );
+
+  useEffect(() => {
+    setReviewedPotentialRepeatKeys((previous) => {
+      const next = new Set(
+        Array.from(previous).filter((key) => potentialRepeatKeys.has(key))
+      );
+      if (next.size === previous.size) {
+        let unchanged = true;
+        for (const key of next) {
+          if (!previous.has(key)) {
+            unchanged = false;
+            break;
+          }
+        }
+        if (unchanged) {
+          return previous;
+        }
+      }
+      return next;
+    });
+  }, [potentialRepeatKeys, setReviewedPotentialRepeatKeys]);
+
+  const [reviewedPotentialRepeats, unreviewedPotentialRepeats] = useMemo(() => {
+    const reviewed: PotentialRepeat[] = [];
+    const unreviewed: PotentialRepeat[] = [];
+
+    potentialRepeats.forEach((repeat) => {
+      if (reviewedPotentialRepeatKeys.has(potentialRepeatKey(repeat))) {
+        reviewed.push(repeat);
+      } else {
+        unreviewed.push(repeat);
+      }
+    });
+
+    return [reviewed, unreviewed];
+  }, [potentialRepeats, reviewedPotentialRepeatKeys]);
+
   const { autofillEnabled, setAutofillEnabled } = props;
   const toggleAutofillEnabled = useCallback(() => {
     if (autofillEnabled) {
@@ -1415,6 +1635,10 @@ const GridMode = ({
               openBlacklistManager={() => {
                 setShowBlacklistManager(true);
               }}
+              potentialRepeatsCount={unreviewedPotentialRepeats.length}
+              openPotentialRepeats={() => {
+                setShowPotentialRepeats(true);
+              }}
             />
           </TopBar>
         </div>
@@ -1456,6 +1680,223 @@ const GridMode = ({
           >
             <h2>Blacklisted Words</h2>
             <BlacklistManager onChange={refreshBlacklistConsumers} />
+          </Overlay>
+        ) : (
+          ''
+        )}
+        {showPotentialRepeats ? (
+          <Overlay
+            closeCallback={() => {
+              setShowPotentialRepeats(false);
+            }}
+          >
+            <h2>Potential Repeated Fill</h2>
+            {potentialRepeats.length === 0 ? (
+              <p>
+                No repeated 3+ letter wordlist strings found in typed grid fill.
+              </p>
+            ) : (
+              <>
+                <p>
+                  Reviewing typed letters only. Suggestions and unaccepted
+                  autofill are ignored.
+                </p>
+                <div className={styles.potentialRepeatsSection}>
+                  <h3 className={styles.potentialRepeatsSectionHeader}>
+                    Needs Review
+                  </h3>
+                  {unreviewedPotentialRepeats.length === 0 ? (
+                    <p className={styles.potentialRepeatsEmpty}>
+                      No unreviewed potential repeats.
+                    </p>
+                  ) : (
+                    <div className={styles.potentialRepeatsList}>
+                      {unreviewedPotentialRepeats.map((repeat) => (
+                        <div
+                          key={repeat.word}
+                          className={styles.potentialRepeatCard}
+                        >
+                          <div className={styles.potentialRepeatHeader}>
+                            <strong>{repeat.word}</strong>
+                            <span>
+                              {repeat.occurrences.length}{' '}
+                              {repeat.occurrences.length === 1
+                                ? 'match'
+                                : 'matches'}
+                            </span>
+                          </div>
+                          <div className={styles.potentialRepeatOccurrences}>
+                            {Array.from(
+                              new Map(
+                                repeat.occurrences.map((occurrence) => [
+                                  occurrence.entryIndex,
+                                  occurrence,
+                                ])
+                              ).values()
+                            ).map((occurrence) => (
+                              <button
+                                key={`${repeat.word}-${occurrence.entryIndex}`}
+                                type="button"
+                                className={styles.potentialRepeatButton}
+                                onClick={() => {
+                                  const action: ClickedEntryAction = {
+                                    type: 'CLICKEDENTRY',
+                                    entryIndex: occurrence.entryIndex,
+                                  };
+                                  setShowPotentialRepeats(false);
+                                  dispatch(action);
+                                }}
+                              >
+                                <span
+                                  className={styles.potentialRepeatEntryLabel}
+                                >
+                                  {occurrence.entryLabel}
+                                </span>
+                                <span
+                                  className={styles.potentialRepeatEntryFill}
+                                >
+                                  <span>
+                                    {occurrence.entryFill.slice(
+                                      0,
+                                      occurrence.startIndex
+                                    )}
+                                  </span>
+                                  <span
+                                    className={styles.potentialRepeatMatch}
+                                  >
+                                    {occurrence.entryFill.slice(
+                                      occurrence.startIndex,
+                                      occurrence.endIndex + 1
+                                    )}
+                                  </span>
+                                  <span>
+                                    {occurrence.entryFill.slice(
+                                      occurrence.endIndex + 1
+                                    )}
+                                  </span>
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                          <div className={styles.potentialRepeatActions}>
+                            <button
+                              type="button"
+                              className={styles.potentialRepeatReviewButton}
+                              onClick={() => {
+                                setReviewedPotentialRepeatKeys((previous) => {
+                                  const next = new Set(previous);
+                                  next.add(potentialRepeatKey(repeat));
+                                  return next;
+                                });
+                              }}
+                            >
+                              Reviewed
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className={styles.potentialRepeatsSection}>
+                  <h3 className={styles.potentialRepeatsSectionHeader}>
+                    Reviewed
+                  </h3>
+                  {reviewedPotentialRepeats.length === 0 ? (
+                    <p className={styles.potentialRepeatsEmpty}>
+                      No reviewed potential repeats yet.
+                    </p>
+                  ) : (
+                    <div className={styles.potentialRepeatsList}>
+                      {reviewedPotentialRepeats.map((repeat) => (
+                        <div
+                          key={repeat.word}
+                          className={styles.potentialRepeatCard}
+                        >
+                          <div className={styles.potentialRepeatHeader}>
+                            <strong>{repeat.word}</strong>
+                            <span>
+                              {repeat.occurrences.length}{' '}
+                              {repeat.occurrences.length === 1
+                                ? 'match'
+                                : 'matches'}
+                            </span>
+                          </div>
+                          <div className={styles.potentialRepeatOccurrences}>
+                            {Array.from(
+                              new Map(
+                                repeat.occurrences.map((occurrence) => [
+                                  occurrence.entryIndex,
+                                  occurrence,
+                                ])
+                              ).values()
+                            ).map((occurrence) => (
+                              <button
+                                key={`${repeat.word}-${occurrence.entryIndex}`}
+                                type="button"
+                                className={styles.potentialRepeatButton}
+                                onClick={() => {
+                                  const action: ClickedEntryAction = {
+                                    type: 'CLICKEDENTRY',
+                                    entryIndex: occurrence.entryIndex,
+                                  };
+                                  setShowPotentialRepeats(false);
+                                  dispatch(action);
+                                }}
+                              >
+                                <span
+                                  className={styles.potentialRepeatEntryLabel}
+                                >
+                                  {occurrence.entryLabel}
+                                </span>
+                                <span
+                                  className={styles.potentialRepeatEntryFill}
+                                >
+                                  <span>
+                                    {occurrence.entryFill.slice(
+                                      0,
+                                      occurrence.startIndex
+                                    )}
+                                  </span>
+                                  <span
+                                    className={styles.potentialRepeatMatch}
+                                  >
+                                    {occurrence.entryFill.slice(
+                                      occurrence.startIndex,
+                                      occurrence.endIndex + 1
+                                    )}
+                                  </span>
+                                  <span>
+                                    {occurrence.entryFill.slice(
+                                      occurrence.endIndex + 1
+                                    )}
+                                  </span>
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                          <div className={styles.potentialRepeatActions}>
+                            <button
+                              type="button"
+                              className={styles.potentialRepeatReviewButton}
+                              onClick={() => {
+                                setReviewedPotentialRepeatKeys((previous) => {
+                                  const next = new Set(previous);
+                                  next.delete(potentialRepeatKey(repeat));
+                                  return next;
+                                });
+                              }}
+                            >
+                              Mark as Unreviewed
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </Overlay>
         ) : (
           ''

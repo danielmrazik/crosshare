@@ -70,6 +70,99 @@
   opacity: 1;
 }
 
+.potentialRepeatsList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: min(32rem, 90vw);
+}
+
+.potentialRepeatsSection {
+  margin-top: 1rem;
+}
+
+.potentialRepeatsSectionHeader {
+  margin-bottom: 0.5rem;
+}
+
+.potentialRepeatsEmpty {
+  margin: 0 0 0.75rem;
+  opacity: 0.8;
+}
+
+.potentialRepeatCard {
+  padding: 0.75rem;
+  border: 1px solid var(--secondary);
+  border-radius: 0.5rem;
+  background: var(--bg-hover);
+}
+
+.potentialRepeatHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.potentialRepeatOccurrences {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.potentialRepeatActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
+}
+
+.potentialRepeatButton {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--secondary);
+  border-radius: 999px;
+  color: var(--text);
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.potentialRepeatButton:hover {
+  background: var(--secondary-hover);
+}
+
+.potentialRepeatEntryLabel {
+  font-weight: 700;
+}
+
+.potentialRepeatEntryFill {
+  font-family: monospace;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+}
+
+.potentialRepeatMatch {
+  font-weight: 700;
+  color: var(--entry-cell);
+  background: color-mix(in srgb, var(--entry-cell) 18%, transparent);
+  border-radius: 0.2rem;
+}
+
+.potentialRepeatReviewButton {
+  padding: 0.3rem 0.65rem;
+  border: 1px dashed var(--entry-cell);
+  border-radius: 0.4rem;
+  color: var(--entry-cell);
+  background: color-mix(in srgb, var(--entry-cell) 10%, var(--bg));
+  cursor: pointer;
+}
+
+.potentialRepeatReviewButton:hover {
+  background: color-mix(in srgb, var(--entry-cell) 18%, var(--bg));
+}
+
 .newPuzzleWrapper {
   margin: 1em 2em;
 }

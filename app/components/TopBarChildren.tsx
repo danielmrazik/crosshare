@@ -11,6 +11,7 @@ import {
   FaKeyboard,
   FaListOl,
   FaPalette,
+  FaRegClone,
   FaRegCheckCircle,
   FaRegCircle,
   FaRegFile,
@@ -662,6 +663,8 @@ interface TopBarChildrenProps {
   toggleKeyboard: boolean;
   setToggleKeyboard: (val: boolean) => void;
   openBlacklistManager: () => void;
+  potentialRepeatsCount: number;
+  openPotentialRepeats: () => void;
 }
 
 const TopBarChildren = (props: TopBarChildrenProps) => {
@@ -680,6 +683,8 @@ const TopBarChildren = (props: TopBarChildrenProps) => {
     stats,
     builderState,
     openBlacklistManager,
+    potentialRepeatsCount,
+    openPotentialRepeats,
   } = props;
   let autofillIcon = <SpinnerDisabled />;
   let autofillReverseIcon = <SpinnerWorking />;
@@ -706,6 +711,24 @@ const TopBarChildren = (props: TopBarChildrenProps) => {
         text="Blacklist"
         onClick={() => {
           openBlacklistManager();
+        }}
+      />
+      <TopBarLink
+        icon={<FaRegClone />}
+        text={
+          potentialRepeatsCount > 0
+            ? `Repeats (${potentialRepeatsCount})`
+            : 'Repeats'
+        }
+        hoverText={
+          potentialRepeatsCount > 0
+            ? `${potentialRepeatsCount} potential repeated fill item${
+                potentialRepeatsCount === 1 ? '' : 's'
+              }`
+            : 'Review potential repeated fill'
+        }
+        onClick={() => {
+          openPotentialRepeats();
         }}
       />
       <TopBarDropDown
