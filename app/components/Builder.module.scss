@@ -57,6 +57,19 @@
   font-weight: normal;
 }
 
+.subtleBanButton {
+  color: var(--text);
+  background: var(--bg-hover);
+  border: 1px solid var(--secondary);
+  border-radius: 999px;
+  opacity: 0.8;
+}
+
+.subtleBanButton:hover {
+  background: var(--secondary-hover);
+  opacity: 1;
+}
+
 .newPuzzleWrapper {
   margin: 1em 2em;
 }

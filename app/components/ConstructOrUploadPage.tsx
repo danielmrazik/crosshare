@@ -30,6 +30,7 @@ import { Hero } from './Hero.js';
 import { Link, LinkButton } from './Link.js';
 
 export function ConstructOrUploadPage({ isUpload }: { isUpload: boolean }) {
+  const showSupportingContent = false;
   const [dbReady, dbError, dbLoading, setDbLoaded] = useWordDB();
   const [showBuilder, setShowBuilder] = useState(false);
   const ctx = useContext(AuthContext);
@@ -244,105 +245,121 @@ export function ConstructOrUploadPage({ isUpload }: { isUpload: boolean }) {
         text={
           isUpload
             ? 'Your crossword puzzles deserve to get shared'
-            : 'Construct crossword puzzles in a flash'
+            : 'Crosswoods custom constructor'
+        }
+        subtitle={
+          isUpload ? undefined : (
+            <>
+              Built on <a href="https://crosshare.org">Crosshare</a>
+            </>
+          )
         }
       >
         {heroContent}
       </Hero>
-      <BigQuote
-        quote={
-          isUpload
-            ? "Crosshare changed the way I share my puzzles. The analytics allow me to better understand which parts of my grids are most difficult for solvers. It's a big part of why WWMC started and is still running today."
-            : "The Crosshare constructor helps me build better puzzles faster. The interface is more intuitive than Crossfire's and the autofill feature works far more efficiently."
-        }
-        attribution={
-          <>
-            Will Pfadenhauer of{' '}
-            <Link href={'/PBWMC'}>
-              Pandora&apos;s Blocks Weekly Meta Crossword
-            </Link>
-          </>
-        }
-      />
-      <FeatureList>
-        <FeatureListItem
-          icon={<MdMoneyOff />}
-          heading="It's 100% free"
-          text="Constructing and sharing puzzles on Crosshare is always free. You can publish as many puzzles as you'd like and share with them with as many solvers as you can find."
-        />
-        <FeatureListItem
-          icon={<FaMagic />}
-          heading="Fill grids like magic"
-          text="The autofiller instantly fills in the rest of the grid as you enter your fill. Press the `Enter` key to shake things up and get a different autofill."
-        />
-        <FeatureListItem
-          icon={<IoMdResize />}
-          heading="All shapes and sizes are welcome"
-          text="Crosshare supports grids of any size. The interface is optimized to fit as large a grid (and as many clues) as possible on any devices you and your solvers are using."
-        />
-        <FeatureListItem
-          icon={<FaBicycle />}
-          heading="Construct on the go"
-          text="The Crosshare constructor works on desktops, tablets, and phones. Construct a mini puzzle while waiting for the bus, or work on a grid from your iPad on the couch."
-        />
-        <FeatureListItem
-          icon={<IoMdPhonePortrait />}
-          heading="An app-like experience"
-          text="Crosshare's solving interface is mobile-first and makes solving your puzzle as smooth as butter on desktops, tablets, and phones. Almost 50% of solvers are using mobile devices - don't let a poor interface keep them from solving your puzzles. Crosshare also supports dark mode, grid highlighting and tooltips for referenced entries, and more best-in-class features."
-        />
-        <FeatureListItem
-          icon={<FaShareSquare />}
-          heading="Crosswords are social"
-          text="Crosshare puzzles are made to share. Our search engine optimization and social tags will get as many people solving your puzzle as possible. Social media posts automatically include grid preview images, puzzle titles, and teaser clues."
-        />
-        <FeatureListItem
-          icon={<FaChartBar />}
-          heading="Advanced analytics"
-          text="As a constructor, you get access to advanced analytics about your puzzle. Find out how many people solve your puzzle, how long it takes them, and view heatmaps of exactly which cells they get stuck on."
-        />
-        <FeatureListItem
-          icon={<FaComment />}
-          heading="An instant crossword blog"
-          text="After constructing your first puzzle you can reserve your own URL and instantly create a crossword blog. You get a centralized page to share and talk about all of your puzzles. Commenting is enabled from the start and Crosshare is the only place where comments feature solve times, clue tooltips, and other crossword specific features."
-        />
-        <FeatureListItem
-          icon={<FaQuestionCircle />}
-          heading="First class meta puzzle support"
-          text="Crosshare is the only puzzle host that has built in support for meta/contest crosswords including submission tracking, a leaderboard, and detailed statistics."
-        />
-        <FeatureListItem
-          icon={<FaCode />}
-          heading="Dead simple embedding"
-          text="Any of your puzzles can be embedded on another site with just a few clicks."
-        />
-        <FeatureListItem
-          icon={<CgSidebarRight />}
-          heading="Barred grids"
-          text="Barred crosswords (and combinations of bars and blocks) have first class support in the constructor and the solving interface."
-        />
-        <FeatureListItem
-          icon={<FaCat />}
-          heading="Schrödinger puzzles and bidirectional rebuses"
-          text="Crosshare also natively supports puzzles with an arbitrary number of valid solutions. The alternate solutions are shown to the solver after the grid is complete to make sure they have the aha moment."
-        />
-      </FeatureList>
-      <div className={styles.heroWrap}>
-        {isUpload ? (
-          <>
-            <h3>Don’t have a .puz file to upload?</h3>
-            <LinkButton
-              className={clsx('marginBottom1em', styles.launch)}
-              href="/construct"
-            >
-              Build one now with the Crosshare Constructor
-            </LinkButton>
-          </>
-        ) : (
-          heroContent
-        )}
-      </div>
-      <div className={styles.main}>
-        <div className={styles.starting}>
+      {!isUpload ? (
+        <BigQuote quote='An adventure through original crossword puzzles, "crosswordese" trivia, cryptic dabbling, and more. Get lost in the words.' />
+      ) : null}
+      {showSupportingContent ? (
+        <>
+          <BigQuote
+            quote={
+              isUpload
+                ? "Crosshare changed the way I share my puzzles. The analytics allow me to better understand which parts of my grids are most difficult for solvers. It's a big part of why WWMC started and is still running today."
+                : 'An adventure through original crossword puzzles, "crosswordese" trivia, cryptic dabbling, and more. Get lost in the words.'
+            }
+            attribution={
+              isUpload ? (
+                <>
+                  Will Pfadenhauer of{' '}
+                  <Link href={'/PBWMC'}>
+                    Pandora&apos;s Blocks Weekly Meta Crossword
+                  </Link>
+                </>
+              ) : (
+                ''
+              )
+            }
+          />
+          <FeatureList>
+            <FeatureListItem
+              icon={<MdMoneyOff />}
+              heading="It's 100% free"
+              text="Constructing and sharing puzzles on Crosshare is always free. You can publish as many puzzles as you'd like and share with them with as many solvers as you can find."
+            />
+            <FeatureListItem
+              icon={<FaMagic />}
+              heading="Fill grids like magic"
+              text="The autofiller instantly fills in the rest of the grid as you enter your fill. Press the `Enter` key to shake things up and get a different autofill."
+            />
+            <FeatureListItem
+              icon={<IoMdResize />}
+              heading="All shapes and sizes are welcome"
+              text="Crosshare supports grids of any size. The interface is optimized to fit as large a grid (and as many clues) as possible on any devices you and your solvers are using."
+            />
+            <FeatureListItem
+              icon={<FaBicycle />}
+              heading="Construct on the go"
+              text="The Crosshare constructor works on desktops, tablets, and phones. Construct a mini puzzle while waiting for the bus, or work on a grid from your iPad on the couch."
+            />
+            <FeatureListItem
+              icon={<IoMdPhonePortrait />}
+              heading="An app-like experience"
+              text="Crosshare's solving interface is mobile-first and makes solving your puzzle as smooth as butter on desktops, tablets, and phones. Almost 50% of solvers are using mobile devices - don't let a poor interface keep them from solving your puzzles. Crosshare also supports dark mode, grid highlighting and tooltips for referenced entries, and more best-in-class features."
+            />
+            <FeatureListItem
+              icon={<FaShareSquare />}
+              heading="Crosswords are social"
+              text="Crosshare puzzles are made to share. Our search engine optimization and social tags will get as many people solving your puzzle as possible. Social media posts automatically include grid preview images, puzzle titles, and teaser clues."
+            />
+            <FeatureListItem
+              icon={<FaChartBar />}
+              heading="Advanced analytics"
+              text="As a constructor, you get access to advanced analytics about your puzzle. Find out how many people solve your puzzle, how long it takes them, and view heatmaps of exactly which cells they get stuck on."
+            />
+            <FeatureListItem
+              icon={<FaComment />}
+              heading="An instant crossword blog"
+              text="After constructing your first puzzle you can reserve your own URL and instantly create a crossword blog. You get a centralized page to share and talk about all of your puzzles. Commenting is enabled from the start and Crosshare is the only place where comments feature solve times, clue tooltips, and other crossword specific features."
+            />
+            <FeatureListItem
+              icon={<FaQuestionCircle />}
+              heading="First class meta puzzle support"
+              text="Crosshare is the only puzzle host that has built in support for meta/contest crosswords including submission tracking, a leaderboard, and detailed statistics."
+            />
+            <FeatureListItem
+              icon={<FaCode />}
+              heading="Dead simple embedding"
+              text="Any of your puzzles can be embedded on another site with just a few clicks."
+            />
+            <FeatureListItem
+              icon={<CgSidebarRight />}
+              heading="Barred grids"
+              text="Barred crosswords (and combinations of bars and blocks) have first class support in the constructor and the solving interface."
+            />
+            <FeatureListItem
+              icon={<FaCat />}
+              heading="Schrödinger puzzles and bidirectional rebuses"
+              text="Crosshare also natively supports puzzles with an arbitrary number of valid solutions. The alternate solutions are shown to the solver after the grid is complete to make sure they have the aha moment."
+            />
+          </FeatureList>
+          <div className={styles.heroWrap}>
+            {isUpload ? (
+              <>
+                <h3>Don’t have a .puz file to upload?</h3>
+                <LinkButton
+                  className={clsx('marginBottom1em', styles.launch)}
+                  href="/construct"
+                >
+                  Build one now with the Crosshare Constructor
+                </LinkButton>
+              </>
+            ) : (
+              heroContent
+            )}
+          </div>
+          <div className={styles.main}>
+            <div className={styles.starting}>
           <h2 className="textAlignCenter">New to making crosswords?</h2>
           <p>
             Don’t be intimidated! Constructing great crosswords takes a lot of
@@ -442,8 +459,8 @@ export function ConstructOrUploadPage({ isUpload }: { isUpload: boolean }) {
             </a>{' '}
             has a lot of good information.
           </p>
-        </div>
-        <div className={styles.faq}>
+            </div>
+            <div className={styles.faq}>
           <h2 className="textAlignCenter">FAQ</h2>
           <h3>What if I have an existing puzzle I’d like to upload?</h3>
           <p>
@@ -547,8 +564,10 @@ export function ConstructOrUploadPage({ isUpload }: { isUpload: boolean }) {
           <p>
             Please get in touch via <ContactLinks />.
           </p>
-        </div>
-      </div>
+            </div>
+          </div>
+        </>
+      ) : null}
     </>
   );
 }

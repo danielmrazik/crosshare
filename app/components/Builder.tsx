@@ -19,7 +19,6 @@ import {
 import * as BA from '../lib/bitArray.js';
 import {
   addToBlacklist,
-  getBlacklist,
   getBlacklistArray,
   removeFromBlacklist,
   saveBlacklist,
@@ -166,6 +165,7 @@ function PotentialFillRow({
       </div>
       <button
         type="button"
+        className={styles.subtleBanButton}
         style={{
           flex: '0 0 auto',
           padding: '2px 8px',
@@ -201,6 +201,7 @@ interface PotentialFillListProps {
   selected: boolean;
   values: [string, number][];
   dispatch: Dispatch<ClickedFillAction>;
+  onBanWord: (word: string) => void;
 }
 const PotentialFillList = (props: PotentialFillListProps) => {
   const listRef = useListRef(null);
@@ -231,10 +232,7 @@ const PotentialFillList = (props: PotentialFillListProps) => {
             entryIndex: props.entryIndex,
             dispatch: props.dispatch,
             values: visibleValues,
-            onBanWord: (word: string) => {
-              const normalized = word.trim().toUpperCase();
-              addToBlacklist(normalized);
-            },
+            onBanWord: props.onBanWord,
           }}
           listRef={listRef}
           rowCount={visibleValues.length}
@@ -280,7 +278,7 @@ const initializeState = (props: BuilderProps & AuthProps): BuilderState => {
   });
 };
 
-const BlacklistManager = () => {
+const BlacklistManager = ({ onChange }: { onChange?: () => void }) => {
   const [words, setWords] = useState<string[]>(() => getBlacklistArray());
   const [newWord, setNewWord] = useState('');
   const [bulkWords, setBulkWords] = useState('');
@@ -302,7 +300,8 @@ const BlacklistManager = () => {
     addToBlacklist(normalized);
     setNewWord('');
     refresh();
-  }, [newWord, words, refresh]);
+    onChange?.();
+  }, [newWord, words, refresh, onChange]);
 
   const addBulkWords = useCallback(() => {
     const parsed = bulkWords
@@ -322,7 +321,8 @@ const BlacklistManager = () => {
     saveBlacklist(merged);
     setBulkWords('');
     refresh();
-  }, [bulkWords, words, refresh]);
+    onChange?.();
+  }, [bulkWords, words, refresh, onChange]);
 
   const copyBlacklist = useCallback((): void => {
     const text = words.join('\n');
@@ -468,6 +468,7 @@ const BlacklistManager = () => {
                     e.preventDefault();
                     removeFromBlacklist(word);
                     refresh();
+                    onChange?.();
                   }}
                 >
                   Unban
@@ -525,9 +526,13 @@ export const Builder = (
   const currentCells = useRef(state.grid.cells);
   const currentVBars = useRef(state.grid.vBars);
   const currentHBars = useRef(state.grid.hBars);
-  const priorSolves = useRef<[string[], Set<number>, Set<number>][]>([]);
+  const currentGrid = useRef(state.grid);
+  const priorSolves = useRef<[string[], Set<number>, Set<number>, string][]>(
+    []
+  );
   const priorWidth = useRef(state.grid.width);
   const priorHeight = useRef(state.grid.height);
+  const latestAutofillBlacklist = useRef('');
 
   const worker = useRef<Worker | null>(null);
 
@@ -543,10 +548,22 @@ export const Builder = (
       worker.current.onmessage = (e) => {
         const data = e.data as WorkerMessage;
         if (isAutofillResultMessage(data)) {
+          const blacklistWords = getBlacklistArray();
+          if (
+            hasBlacklistedEntry(
+              currentGrid.current,
+              data.result,
+              blacklistWords
+            )
+          ) {
+            console.warn('Ignoring autofill result with blacklisted entry');
+            return;
+          }
           priorSolves.current.unshift([
             data.result,
             data.input[1],
             data.input[2],
+            latestAutofillBlacklist.current,
           ]);
           if (
             currentCells.current.length === data.input[0].length &&
@@ -591,6 +608,9 @@ export const Builder = (
     currentCells.current = state.grid.cells;
     currentVBars.current = state.grid.vBars;
     currentHBars.current = state.grid.hBars;
+    currentGrid.current = state.grid;
+    const blacklistWords = getBlacklistArray();
+    const blacklistKey = blacklistWords.join('\n');
     if (
       priorWidth.current !== state.grid.width ||
       priorHeight.current !== state.grid.height
@@ -599,8 +619,16 @@ export const Builder = (
       priorHeight.current = state.grid.height;
       priorSolves.current = [];
     }
-    for (const [priorSolve, vBars, hBars] of priorSolves.current) {
+    for (const [
+      priorSolve,
+      vBars,
+      hBars,
+      priorBlacklistKey,
+    ] of priorSolves.current) {
       let match = true;
+      if (priorBlacklistKey !== blacklistKey) {
+        match = false;
+      }
       for (const [i, cell] of state.grid.cells.entries()) {
         if (priorSolve[i] === '.' && cell !== '.') {
           match = false;
@@ -617,6 +645,12 @@ export const Builder = (
       if (!eqSet(hBars, state.grid.hBars)) {
         match = false;
       }
+      if (
+        match &&
+        hasBlacklistedEntry(state.grid, priorSolve, blacklistWords)
+      ) {
+        match = false;
+      }
       if (match) {
         const msg: CancelAutofillMessage = { type: 'cancel' };
         setAutofillInProgress(false);
@@ -626,9 +660,11 @@ export const Builder = (
       }
     }
     setAutofilledGrid([]);
+    latestAutofillBlacklist.current = blacklistKey;
     const autofill: AutofillMessage = {
       type: 'autofill',
       grid: state.grid.cells,
+      blacklist: blacklistWords,
       width: state.grid.width,
       height: state.grid.height,
       vBars: state.grid.vBars,
@@ -801,12 +837,42 @@ const lettersAtIndex = (fill: [string, number][], index: number): string => {
   return seen;
 };
 
+const hasBlacklistedEntry = (
+  grid: BuilderGrid,
+  cells: string[],
+  blacklistWords: string[]
+): boolean => {
+  const blacklist = new Set(blacklistWords);
+
+  for (const entry of grid.entries) {
+    let word = '';
+
+    for (const cell of entry.cells) {
+      const value = cells[cell.row * grid.width + cell.col]
+        ?.trim()
+        .toUpperCase();
+
+      if (!value || value === '.') {
+        word = '';
+        break;
+      }
+
+      word += value;
+    }
+
+    if (word && blacklist.has(word)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const potentialFill = (
   entry: ViewableEntry,
-  grid: BuilderGrid
+  grid: BuilderGrid,
+  blacklist: Set<string>
 ): [string, number][] => {
-  const blacklist = getBlacklist();
-
   if (entry.completedWord) {
     const word = entry.completedWord.trim().toUpperCase();
     if (blacklist.has(word)) {
@@ -974,11 +1040,14 @@ const PuzDownloadOverlay = (props: {
           w={props.state.grid.width}
           h={props.state.grid.height}
           g={props.state.grid.cells}
-          n="Crosswoods"
-          t="yyyy.mm.dd"
-          cn={`Crosswoods
-            heycrosswoods@gmail.com
-            https://heycrosswoods.com`}
+          // Restore branded export metadata later if needed:
+          // n="Crosswoods"
+          // t="yyyy.mm.dd"
+          // cn={`Crosswoods
+          //   heycrosswoods@gmail.com
+          //   https://heycrosswoods.com`}
+          n=""
+          t=""
           {...getClueProps(
             props.state.grid.sortedEntries,
             props.state.grid.entries,
@@ -1022,13 +1091,29 @@ const GridMode = ({
   const [highlightColor, setHighlightColor] = useState(PRIMARY);
   const { showSnackbar } = useSnackbar();
   const [manualBanWord, setManualBanWord] = useState('');
+  const [blacklistWords, setBlacklistWords] = useState<string[]>(() =>
+    getBlacklistArray()
+  );
+
+  const refreshBlacklistConsumers = useCallback(() => {
+    setBlacklistWords(getBlacklistArray());
+    reRunAutofill();
+  }, [reRunAutofill]);
+
+  const banWord = useCallback(
+    (word: string) => {
+      addToBlacklist(word.trim().toUpperCase());
+      refreshBlacklistConsumers();
+    },
+    [refreshBlacklistConsumers]
+  );
 
   const submitManualBan = () => {
     const word = manualBanWord.trim().toUpperCase();
 
     if (!word) return;
 
-    addToBlacklist(word);
+    banWord(word);
     setManualBanWord('');
   };
 
@@ -1115,11 +1200,14 @@ const GridMode = ({
   useEventListener('paste', pasteHandler);
 
   const fillLists = useMemo(() => {
+    const blacklist = new Set(blacklistWords);
     let left = <></>;
     let right = <></>;
     const [entry, cross] = entryAndCrossAtPosition(state.grid, state.active);
-    let crossMatches = cross && potentialFill(cross, state.grid).slice(0, 1000);
-    let entryMatches = entry && potentialFill(entry, state.grid).slice(0, 1000);
+    let crossMatches =
+      cross && potentialFill(cross, state.grid, blacklist).slice(0, 1000);
+    let entryMatches =
+      entry && potentialFill(entry, state.grid, blacklist).slice(0, 1000);
 
     if (
       crossMatches !== null &&
@@ -1157,6 +1245,7 @@ const GridMode = ({
             entryLength={cross.cells.length}
             entryIndex={cross.index}
             dispatch={dispatch}
+            onBanWord={banWord}
           />
         );
       } else {
@@ -1168,6 +1257,7 @@ const GridMode = ({
             entryLength={cross.cells.length}
             entryIndex={cross.index}
             dispatch={dispatch}
+            onBanWord={banWord}
           />
         );
       }
@@ -1182,6 +1272,7 @@ const GridMode = ({
             entryLength={entry.cells.length}
             entryIndex={entry.index}
             dispatch={dispatch}
+            onBanWord={banWord}
           />
         );
       } else {
@@ -1193,12 +1284,13 @@ const GridMode = ({
             entryLength={entry.cells.length}
             entryIndex={entry.index}
             dispatch={dispatch}
+            onBanWord={banWord}
           />
         );
       }
     }
     return { left, right };
-  }, [state.grid, state.active, dispatch]);
+  }, [state.grid, state.active, dispatch, banWord, blacklistWords]);
 
   const { autofillEnabled, setAutofillEnabled } = props;
   const toggleAutofillEnabled = useCallback(() => {
@@ -1363,7 +1455,7 @@ const GridMode = ({
             }}
           >
             <h2>Blacklisted Words</h2>
-            <BlacklistManager />
+            <BlacklistManager onChange={refreshBlacklistConsumers} />
           </Overlay>
         ) : (
           ''

@@ -117,6 +117,7 @@ export function isCancelAutofillMessage(
 export interface AutofillMessage extends WorkerMessage {
   type: 'autofill';
   grid: string[];
+  blacklist: string[];
   width: number;
   height: number;
   vBars: Set<number>;

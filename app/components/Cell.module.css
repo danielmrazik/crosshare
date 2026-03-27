@@ -36,6 +36,7 @@
   --current-cell-bg: var(--cell-bg);
   --current-cell-text: var(--text);
   --current-cell-verified: var(--verified-on-bg);
+  --current-cell-autofill: var(--autofill);
 
   position: relative;
   float: left;
@@ -72,27 +73,31 @@
 }
 
 .cellContainerActive {
-  --current-cell-bg: var(--primary);
-  --current-cell-text: var(--onprimary);
-  --current-cell-verified: var(--verified-on-primary);
+  --current-cell-bg: var(--entry-cell);
+  --current-cell-text: var(--on-entry-cell);
+  --current-cell-verified: var(--verified-on-entry-cell);
+  --current-cell-autofill: var(--autofill-on-entry-cell);
 }
 
 .cellContainerSelected {
   --current-cell-bg: var(--selected-cell);
   --current-cell-text: var(--on-selected-cell);
   --current-cell-verified: var(--verified-on-selected-cell);
+  --current-cell-autofill: var(--autofill-on-selected-cell);
 }
 
 .cellContainerEntryCell {
-  --current-cell-bg: var(--lighter);
-  --current-cell-text: var(--on-lighter);
-  --current-cell-verified: var(--verified-on-lighter);
+  --current-cell-bg: var(--cell-bg);
+  --current-cell-text: var(--text);
+  --current-cell-verified: var(--verified-on-bg);
+  --current-cell-autofill: var(--autofill);
 }
 
 .cellContainerRefed {
   --current-cell-bg: var(--secondary);
   --current-cell-text: var(--on-secondary);
   --current-cell-verified: var(--verified-on-secondary);
+  --current-cell-autofill: var(--autofill-on-secondary);
 }
 
 .cq {
@@ -162,6 +167,7 @@
 
 .number {
   position: absolute;
+  z-index: 2;
   top: 0;
   left: 0.1em;
 
@@ -172,9 +178,11 @@
 }
 
 .contents {
+  position: relative;
+  z-index: 2;
   font-size: 0.9em;
   line-height: 1.2em;
-  color: var(--autofill);
+  color: var(--current-cell-autofill);
   text-align: center;
 }
 

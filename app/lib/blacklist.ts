@@ -6,6 +6,12 @@ function normalizeWord(word: string): string {
   return word.trim().toUpperCase();
 }
 
+function normalizeWords(words: Iterable<string>): Set<string> {
+  return new Set<string>(
+    Array.from(words).map((word) => normalizeWord(word))
+  );
+}
+
 function readBlacklistFromStorage(): Set<string> {
   if (typeof window === 'undefined') {
     return new Set<string>();
@@ -44,14 +50,17 @@ export function refreshBlacklist(): Set<string> {
   return blacklistCache;
 }
 
+export function setBlacklistCache(words: Iterable<string>): Set<string> {
+  blacklistCache = normalizeWords(words);
+  return blacklistCache;
+}
+
 export function saveBlacklist(words: Set<string>): void {
   if (typeof window === 'undefined') {
     return;
   }
 
-  const normalized = new Set<string>(
-    Array.from(words).map((word) => normalizeWord(word))
-  );
+  const normalized = normalizeWords(words);
 
   const arr = Array.from(normalized).sort();
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));

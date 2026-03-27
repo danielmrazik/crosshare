@@ -20,12 +20,12 @@ const LARGE_BREAKPOINT = 992;
 export const SMALL_AND_UP_RULES = '(min-width: ' + SMALL_BREAKPOINT + 'px)';
 export const LARGE_AND_UP_RULES = '(min-width: ' + LARGE_BREAKPOINT + 'px)';
 
-export const PRIMARY = '#eb984e';
+export const PRIMARY = '#356761';
 export const LINK = '#2874a6';
 export const ERROR_COLOR = adjustHue(PRIMARY, 280);
 export const VERIFIED_COLOR = mix(adjustHue(PRIMARY, 180), 'black', 0.3);
 
-const DARK_MODE_WHITE = '#d0d0d0';
+const DARK_MODE_WHITE = '#efefef';
 
 const readableColor = (color: string, darkMode: boolean) => {
   if (readableColorIsBlack(color)) {
@@ -80,16 +80,20 @@ export const colorTheme = ({
       ? mix(verifiedColor, 'white', 0.4)
       : verifiedColor;
 
-  const cellBG = darkMode ? '#353535' : 'white';
+  const cellBG = darkMode ? '#2f2f2f' : 'white';
   const hover = darkMode ? 'white' : 'black';
   const hoverRatio = 0.1;
   const bg = darkMode ? '#222' : '#fff';
   const linkLightBG = mix(link, bg, 0.9);
   const linkLightBGHover = mix(link, bg, 0.8);
   const text = darkMode ? DARK_MODE_WHITE : 'black';
-  const secondary = darkMode ? '#505050' : '#ccc';
+  const secondary = darkMode ? '#484848' : '#ccc';
   const lighter = mix(p, cellBG, 0.6);
-  const selectedCell = darkMode ? '#a880ff' : '#c484ff';
+  const selectedCell = '#5f7f7a';
+  const entryCell = '#758b86';
+  const autofillOnSelectedCell = mix(readableColor(selectedCell, darkMode), selectedCell, 0.45);
+  const autofillOnEntryCell = mix(readableColor(entryCell, darkMode), entryCell, 0.45);
+  const autofillOnSecondary = mix(readableColor(secondary, darkMode), secondary, 0.45);
 
   return {
     '--tag-l': darkMode ? '30%' : '85%',
@@ -106,6 +110,11 @@ export const colorTheme = ({
     '--on-secondary': readableColor(secondary, darkMode),
     '--selected-cell': selectedCell,
     '--on-selected-cell': readableColor(selectedCell, darkMode),
+    '--entry-cell': entryCell,
+    '--on-entry-cell': readableColor(entryCell, darkMode),
+    '--autofill-on-selected-cell': autofillOnSelectedCell,
+    '--autofill-on-entry-cell': autofillOnEntryCell,
+    '--autofill-on-secondary': autofillOnSecondary,
     '--bg-hover': mix(bg, hover, hoverRatio),
     '--secondary-hover': mix(secondary, hover, hoverRatio),
     '--boring-bg': darkMode ? '#b5b5b5' : '#555',
@@ -128,6 +137,7 @@ export const colorTheme = ({
     '--verified-on-bg': makeReadable(cellBG, verified),
     '--verified-on-secondary': makeReadable(secondary, verified),
     '--verified-on-selected-cell': makeReadable(selectedCell, verified),
+    '--verified-on-entry-cell': makeReadable(entryCell, verified),
     '--autofill': darkMode ? '#999' : '#bbb',
     '--shade-highlight': darkMode
       ? 'rgba(255, 255, 255, 0.2)'

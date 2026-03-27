@@ -28,7 +28,6 @@ import { logAsyncErrors, slugify } from '../lib/utils.js';
 import { AuthContext } from './AuthContext.js';
 import { ButtonAsLink, ButtonReset } from './Buttons.js';
 import { EmbedContext } from './EmbedContext.js';
-import { Logo } from './Icons.js';
 import { Link } from './Link.js';
 import { Overlay } from './Overlay.js';
 import styles from './TopBar.module.scss';
@@ -237,6 +236,26 @@ const TopBarLinkA = (props: TopBarLinkAProps) => {
   );
 };
 
+const BrandLogo = ({ notificationCount }: { notificationCount: number }) => {
+  return (
+    <span className={styles.logoMark}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        className={styles.logoImage}
+        src="/trees-invis.png"
+        alt="Crosswoods logo"
+        width={HEADER_HEIGHT - 4}
+        height={HEADER_HEIGHT - 4}
+      />
+      {notificationCount ? (
+        <span className={styles.logoBadge}>{notificationCount}</span>
+      ) : (
+        ''
+      )}
+    </span>
+  );
+};
+
 export const TopBar = ({
   children,
   title,
@@ -308,21 +327,13 @@ export const TopBar = ({
                 className={styles.notificationsBtn}
                 title="View Notifications"
               >
-                <Logo
-                  notificationCount={filtered.length}
-                  width={HEADER_HEIGHT - 4}
-                  height={HEADER_HEIGHT - 4}
-                />
-                <span className={styles.logoText}>CROSSHARE</span>
+                <BrandLogo notificationCount={filtered.length} />
+                <span className={styles.logoText}>CROSSWOODS</span>
               </ButtonReset>
             ) : (
               <Link href="/" className={styles.logoLink} title="Crosshare Home">
-                <Logo
-                  notificationCount={0}
-                  width={HEADER_HEIGHT - 4}
-                  height={HEADER_HEIGHT - 4}
-                />
-                <span className={styles.logoText}>CROSSHARE</span>
+                <BrandLogo notificationCount={0} />
+                <span className={styles.logoText}>CROSSWOODS</span>
               </Link>
             )}
             <>{children}</>

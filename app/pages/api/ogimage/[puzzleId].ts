@@ -173,10 +173,10 @@ async function getPng(puzzle: DBPuzzleT): Promise<PNGStream> {
   } else {
     ctx.beginPath();
     ctx.arc(600, 315, 100, 0, 2 * Math.PI);
-    ctx.fillStyle = '#EB984E';
+    ctx.fillStyle = '#7C9D9B';
     ctx.fill();
 
-    img = await loadImage('./public/logo.svg');
+    img = await loadImage('./public/trees-invis.png');
     ctx.drawImage(img, 535, 250, 130, 130);
   }
   return canvas.createPNGStream();

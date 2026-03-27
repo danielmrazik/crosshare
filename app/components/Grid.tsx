@@ -1,4 +1,11 @@
-import { Dispatch, ReactNode, useCallback, useEffect, useState } from 'react';
+import {
+  CSSProperties,
+  Dispatch,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useState,
+} from 'react';
 import {
   cellIndex,
   entryIndexAtPosition,
@@ -46,6 +53,7 @@ export const GridView = ({
   ...props
 }: GridViewProps) => {
   const entryCells = getEntryCells(grid, active);
+  const entryCellIndexes = new Set(entryCells.map((p) => cellIndex(grid, p)));
   const entryIdx = entryIndexAtPosition(grid, active);
   const hasSelection = hasMultipleCells(props.selection);
   const selectedCells = getSelectionCells(props.selection);
@@ -114,6 +122,29 @@ export const GridView = ({
     }
   }
 
+  let activeEntryOutline: ReactNode = null;
+  if (entryCells.length > 0 && !hasSelection) {
+    const rows = entryCells.map((cell) => cell.row);
+    const cols = entryCells.map((cell) => cell.col);
+    const minRow = Math.min(...rows);
+    const maxRow = Math.max(...rows);
+    const minCol = Math.min(...cols);
+    const maxCol = Math.max(...cols);
+    const outlineWidth = '0.09em';
+    const outlineStyle: CSSProperties = {
+      pointerEvents: 'none',
+      position: 'absolute',
+      top: `${(100 * minRow) / grid.height}%`,
+      left: `${(100 * minCol) / grid.width}%`,
+      width: `${(100 * (maxCol - minCol + 1)) / grid.width}%`,
+      height: `${(100 * (maxRow - minRow + 1)) / grid.height}%`,
+      boxShadow: `inset 0 0 0 ${outlineWidth} var(--entry-cell)`,
+      boxSizing: 'border-box',
+      zIndex: 2,
+    };
+    activeEntryOutline = <div aria-hidden style={outlineStyle} />;
+  }
+
   const cells = new Array<ReactNode>();
   for (const [idx, cellValue] of grid.cells.entries()) {
     const defaultCellValue = props.defaultGrid?.cells[idx];
@@ -140,6 +171,7 @@ export const GridView = ({
 
     const col = idx % grid.width;
     const row = Math.floor(idx / grid.height);
+    const isEntryCell = entryCellIndexes.has(idx);
 
     const symmetricalCell =
       props.symmetry != Symmetry.None && props.symmetry != null
@@ -161,7 +193,7 @@ export const GridView = ({
         gridWidth={grid.width}
         gridHeight={grid.height}
         active={isActive}
-        entryCell={entryCells.some((p) => cellIndex(grid, p) === idx)}
+        entryCell={isEntryCell}
         refedCell={refedCells.some((p) => cellIndex(grid, p) === idx)}
         selected={selectedCells.some((p) => cellIndex(grid, p) === idx)}
         isSelecting={hasSelection}
@@ -185,5 +217,10 @@ export const GridView = ({
       />
     );
   }
-  return <>{cells}</>;
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div style={{ position: 'relative', zIndex: 1 }}>{cells}</div>
+      {activeEntryOutline}
+    </div>
+  );
 };

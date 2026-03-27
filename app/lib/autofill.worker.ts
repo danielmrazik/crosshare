@@ -1,5 +1,6 @@
 import { Autofiller } from './Autofiller.js';
 import { setDb } from './WordDB.js';
+import { setBlacklistCache } from './blacklist.js';
 import {
   AutofillCompleteMessage,
   AutofillResultMessage,
@@ -45,6 +46,7 @@ ctx.onmessage = (e) => {
   if (isLoadDBMessage(data)) {
     setDb(data.db);
   } else if (isAutofillMessage(data)) {
+    setBlacklistCache(data.blacklist);
     let shouldError = true;
     for (let i = 0; i < 25; i += 1) {
       if (i >= data.grid.length) {

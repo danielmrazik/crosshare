@@ -159,18 +159,34 @@ export function useAuth(): AuthContextValue {
   const [isMod, setIsMod] = useState(false);
   useEffect(() => {
     if (!user) {
+      setIsPatron(false);
+      setIsMod(false);
       return;
     }
+
+    if (user.uid === 'local-dev') {
+      setIsPatron(false);
+      setIsMod(true);
+      return;
+    }
+
     let didCancel = false;
     async function getUserInfo() {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const res = await (await fetch(`/api/userinfo/${user?.uid}`))
-        .json()
-        .catch((e: unknown) => {
-          console.log(e);
-        });
-      // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
-      if (!didCancel && res) {
+      let res: unknown;
+      try {
+        const response = await fetch(`/api/userinfo/${user.uid}`);
+        if (!response.ok) {
+          throw new Error(
+            `Failed to fetch user info: ${response.status} ${response.statusText}`
+          );
+        }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        res = await response.json();
+      } catch (e: unknown) {
+        console.log(e);
+      }
+
+      if (!didCancel) {
         const ui = parseUserInfo(res);
         setIsPatron(ui.isPatron);
         setIsMod(ui.isMod);

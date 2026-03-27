@@ -15,12 +15,12 @@ export default class CrosshareDocument extends Document {
           />
           <meta
             name="theme-color"
-            content="#eb984e"
+            content="#223e3b"
             media="(prefers-color-scheme: light)"
           />
           <meta
             name="theme-color"
-            content="#764c27"
+            content="#3e4f4e"
             media="(prefers-color-scheme: dark)"
           />
           <link rel="manifest" href="/manifest.json" />
