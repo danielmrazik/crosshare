@@ -23,6 +23,7 @@ interface CellProps {
   refedCell: boolean;
   selected: boolean;
   isSelecting: boolean;
+  shortWordCell: boolean;
   styles: string[];
   value: string;
   number: string;
@@ -116,7 +117,12 @@ export const Cell = memo(function Cell(props: CellProps) {
 
   return (
     <div
-      className={clsx(styles.cellContainer, useCQ && styles.cq, containerClass)}
+      className={clsx(
+        styles.cellContainer,
+        useCQ && styles.cq,
+        containerClass,
+        props.shortWordCell && styles.cellContainerShortWord
+      )}
       style={{
         width: `${100 / props.gridWidth}%`,
         paddingBottom: `${100 / props.gridWidth}%`,

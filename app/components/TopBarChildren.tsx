@@ -11,6 +11,8 @@ import {
   FaKeyboard,
   FaListOl,
   FaPalette,
+  FaPause,
+  FaPlay,
   FaRegClone,
   FaRegCheckCircle,
   FaRegCircle,
@@ -631,10 +633,12 @@ const TopBarMoreDropdown = (props: TopBarMoreDropdownProps) => {
 
 interface TopBarChildrenProps {
   autofillEnabled: boolean;
+  autofillPaused: boolean;
   autofillInProgress: boolean;
   autofilledGridLength: number;
   isAdmin: boolean;
   toggleAutofillEnabled: () => void;
+  toggleAutofillPaused: () => void;
   getMostConstrainedEntry: () => number | null;
   dispatch: Dispatch<PuzzleAction>;
   reRunAutofill: () => void;
@@ -671,6 +675,7 @@ const TopBarChildren = (props: TopBarChildrenProps) => {
   const {
     dispatch,
     toggleAutofillEnabled,
+    toggleAutofillPaused,
     getMostConstrainedEntry,
     reRunAutofill,
     setClueMode,
@@ -689,11 +694,18 @@ const TopBarChildren = (props: TopBarChildrenProps) => {
   let autofillIcon = <SpinnerDisabled />;
   let autofillReverseIcon = <SpinnerWorking />;
   let autofillReverseText = 'Enable Autofill';
+  let autofillPauseIcon = <FaPause />;
+  let autofillPauseText = 'Pause Autofill';
   let autofillText = 'Autofill disabled';
   if (props.autofillEnabled) {
     autofillReverseIcon = <SpinnerDisabled />;
     autofillReverseText = 'Disable Autofill';
-    if (props.autofillInProgress) {
+    if (props.autofillPaused) {
+      autofillIcon = <SpinnerFinished />;
+      autofillPauseIcon = <FaPlay />;
+      autofillPauseText = 'Resume Autofill';
+      autofillText = 'Autofill paused';
+    } else if (props.autofillInProgress) {
       autofillIcon = <SpinnerWorking />;
       autofillText = 'Autofill in progress';
     } else if (props.autofilledGridLength) {
@@ -744,6 +756,16 @@ const TopBarChildren = (props: TopBarChildrenProps) => {
               text={autofillReverseText}
               onClick={toggleAutofillEnabled}
             />
+            {props.autofillEnabled ? (
+              <TopBarDropDownLink
+                icon={autofillPauseIcon}
+                text={autofillPauseText}
+                shortcutHint={<KeyIcon text=";" />}
+                onClick={toggleAutofillPaused}
+              />
+            ) : (
+              ''
+            )}
             <TopBarDropDownLink
               icon={<FaSignInAlt />}
               text="Jump to Most Constrained"

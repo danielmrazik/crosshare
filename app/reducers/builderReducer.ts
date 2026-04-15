@@ -34,6 +34,7 @@ import {
   moveRight,
   moveUp,
   nextCell,
+  rotateGrid90,
 } from '../lib/viewableGrid.js';
 import {
   clearSelection,
@@ -505,6 +506,18 @@ function isClearHighlightAction(
   return action.type === 'CLEARHIGHLIGHT';
 }
 
+export interface RotateGridAction extends PuzzleAction {
+  type: 'ROTATEGRIDLEFT' | 'ROTATEGRIDRIGHT';
+}
+export function rotateGridAction(clockwise: boolean): RotateGridAction {
+  return {
+    type: clockwise ? 'ROTATEGRIDRIGHT' : 'ROTATEGRIDLEFT',
+  };
+}
+function isRotateGridAction(action: PuzzleAction): action is RotateGridAction {
+  return action.type === 'ROTATEGRIDLEFT' || action.type === 'ROTATEGRIDRIGHT';
+}
+
 function normalizeAnswer(answer: string): string {
   return answer.trim();
 }
@@ -638,6 +651,24 @@ function addHighlight(
   if (newCells.size > 0) state.grid.cellStyles.set(highlight, newCells);
   else state.grid.cellStyles.delete(highlight);
   return state;
+}
+
+function rotatePosition(
+  position: Position,
+  width: number,
+  height: number,
+  clockwise: boolean
+): Position {
+  if (clockwise) {
+    return {
+      row: position.col,
+      col: height - position.row - 1,
+    };
+  }
+  return {
+    row: width - position.col - 1,
+    col: position.row,
+  };
 }
 
 function _builderReducer(
@@ -789,6 +820,42 @@ function _builderReducer(
       return state;
     }
     return { ...state, symmetry: action.symmetry };
+  }
+  if (isRotateGridAction(action)) {
+    const clockwise = action.type === 'ROTATEGRIDRIGHT';
+    const grid = rotateGrid90(state.grid, clockwise);
+    const active = {
+      ...rotatePosition(
+        state.active,
+        state.grid.width,
+        state.grid.height,
+        clockwise
+      ),
+      dir:
+        state.active.dir === Direction.Across
+          ? Direction.Down
+          : Direction.Across,
+    };
+    const selection = {
+      start: rotatePosition(
+        state.selection.start,
+        state.grid.width,
+        state.grid.height,
+        clockwise
+      ),
+      end: rotatePosition(
+        state.selection.end,
+        state.grid.width,
+        state.grid.height,
+        clockwise
+      ),
+    };
+    return validateGrid({
+      ...state,
+      grid,
+      active,
+      selection,
+    });
   }
   if (isSetClueAction(action)) {
     const newVal = state.clues[action.word] ?? [];

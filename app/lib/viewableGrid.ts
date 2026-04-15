@@ -675,6 +675,87 @@ export function gridWithBarToggled<
   return fromCells(removeExtraneousBars({ ...grid, vBars, hBars }));
 }
 
+function rotateCellIndex(
+  index: number,
+  width: number,
+  height: number,
+  clockwise: boolean
+): number {
+  const row = Math.floor(index / width);
+  const col = index % width;
+
+  if (clockwise) {
+    return col * height + (height - row - 1);
+  }
+  return (width - col - 1) * height + row;
+}
+
+export function rotateGrid90<
+  Entry extends ViewableEntry,
+  Grid extends ViewableGrid<Entry>,
+>(grid: Grid, clockwise: boolean): Grid {
+  const newWidth = grid.height;
+  const newHeight = grid.width;
+  const cells = Array<string>(grid.cells.length);
+
+  grid.cells.forEach((cell, index) => {
+    cells[rotateCellIndex(index, grid.width, grid.height, clockwise)] = cell;
+  });
+
+  const hidden = new Set<number>();
+  grid.hidden.forEach((index) => {
+    hidden.add(rotateCellIndex(index, grid.width, grid.height, clockwise));
+  });
+
+  const cellStyles = new Map<string, Set<number>>();
+  grid.cellStyles.forEach((indexes, style) => {
+    cellStyles.set(
+      style,
+      new Set(
+        Array.from(indexes, (index) =>
+          rotateCellIndex(index, grid.width, grid.height, clockwise)
+        )
+      )
+    );
+  });
+
+  const vBars = new Set<number>();
+  const hBars = new Set<number>();
+
+  grid.vBars.forEach((index) => {
+    hBars.add(
+      rotateCellIndex(
+        clockwise ? index : index + 1,
+        grid.width,
+        grid.height,
+        clockwise
+      )
+    );
+  });
+
+  grid.hBars.forEach((index) => {
+    vBars.add(
+      rotateCellIndex(
+        clockwise ? index + grid.width : index,
+        grid.width,
+        grid.height,
+        clockwise
+      )
+    );
+  });
+
+  return fromCells({
+    ...grid,
+    width: newWidth,
+    height: newHeight,
+    cells,
+    hidden,
+    cellStyles,
+    vBars,
+    hBars,
+  });
+}
+
 export function getCluedAcrossAndDown(
   clueMap: Record<string, string[]>,
   entries: ViewableEntry[],

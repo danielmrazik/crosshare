@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { FaUndo } from 'react-icons/fa';
 import { List, type RowComponentProps, useListRef } from 'react-window';
 import * as WordDB from '../lib/WordDB.js';
 import {
@@ -32,8 +33,10 @@ import { fromLocalStorage } from '../lib/storage.js';
 import { PRIMARY } from '../lib/style.js';
 import {
   AutofillMessage,
+  BLOCK,
   CancelAutofillMessage,
   Direction,
+  EMPTY,
   KeyK,
   LoadDBMessage,
   ONE_WEEK,
@@ -52,14 +55,16 @@ import { STORAGE_KEY, eqSet } from '../lib/utils.js';
 import { ViewableEntry, entryString } from '../lib/viewableGrid.js';
 import { getAutofillWorker } from '../lib/workerLoader.js';
 import {
+  builderReducer,
+  getClueProps,
+  initialBuilderState,
+} from '../reducers/builderReducer.js';
+import type {
   BuilderGrid,
   BuilderState,
   ClickedFillAction,
   SetShowDownloadLink,
   UseHighlightAction,
-  builderReducer,
-  getClueProps,
-  initialBuilderState,
 } from '../reducers/builderReducer.js';
 import { KeypressAction, PuzzleAction } from '../reducers/commonActions.js';
 import {
@@ -504,8 +509,7 @@ export const Builder = (
   const [reviewedPotentialRepeatKeys, setReviewedPotentialRepeatKeys] =
     useState<Set<string>>(() => {
       const reviewedPotentialRepeats: string[] =
-        (savedInProgress?.reviewedPotentialRepeats as string[] | undefined) ??
-        [];
+        savedInProgress?.reviewedPotentialRepeats ?? [];
       return new Set<string>(reviewedPotentialRepeats);
     });
 
@@ -532,6 +536,7 @@ export const Builder = (
   }, [state.grid]);
 
   const [autofillEnabled, setAutofillEnabled] = useState(true);
+  const [autofillPaused, setAutofillPaused] = useState(false);
 
   // We need a ref to the current grid so we can verify it in worker.onmessage
   const currentCells = useRef(state.grid.cells);
@@ -610,7 +615,7 @@ export const Builder = (
       throw new Error('no autofill worker!');
     }
 
-    if (!autofillEnabled) {
+    if (!autofillEnabled || autofillPaused) {
       const msg: CancelAutofillMessage = { type: 'cancel' };
       setAutofillInProgress(false);
       worker.current.postMessage(msg);
@@ -683,7 +688,13 @@ export const Builder = (
     };
     setAutofillInProgress(true);
     worker.current.postMessage(autofill);
-  }, [state.grid, autofillEnabled, setAutofilledGrid, setAutofillInProgress]);
+  }, [
+    state.grid,
+    autofillEnabled,
+    autofillPaused,
+    setAutofilledGrid,
+    setAutofillInProgress,
+  ]);
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       runAutofill();
@@ -806,7 +817,9 @@ export const Builder = (
       user={props.user}
       isAdmin={props.isAdmin}
       autofillEnabled={autofillEnabled}
+      autofillPaused={autofillPaused}
       setAutofillEnabled={setAutofillEnabled}
+      setAutofillPaused={setAutofillPaused}
       autofilledGrid={autofilledGrid}
       autofillInProgress={autofillInProgress}
       state={state}
@@ -1111,7 +1124,11 @@ const getPotentialRepeats = (grid: BuilderGrid): PotentialRepeat[] => {
   }
 
   const repeated = Array.from(occurrencesByWord.entries())
-    .filter(([_word, occurrences]) => occurrences.length > 1)
+    .filter(([_word, occurrences]) => {
+      return (
+        new Set(occurrences.map((occurrence) => occurrence.entryIndex)).size > 1
+      );
+    })
     .map(([word, occurrences]) => ({
       word,
       occurrences: occurrences.sort((a, b) => {
@@ -1235,7 +1252,9 @@ interface GridModeProps {
   isAdmin: boolean;
   reRunAutofill: () => void;
   autofillEnabled: boolean;
+  autofillPaused: boolean;
   setAutofillEnabled: (val: boolean) => void;
+  setAutofillPaused: (val: boolean) => void;
   autofilledGrid: string[];
   autofillInProgress: boolean;
   state: BuilderState;
@@ -1255,6 +1274,7 @@ const GridMode = ({
   setReviewedPotentialRepeatKeys,
   ...props
 }: GridModeProps) => {
+  const { autofillPaused, setAutofillPaused } = props;
   const [muted, setMuted] = usePersistedBoolean('muted', true);
   const [toggleKeyboard, setToggleKeyboard] = usePersistedBoolean(
     'keyboard',
@@ -1263,6 +1283,10 @@ const GridMode = ({
   const [pickingHighlightColor, setPickingHighlightColor] = useState(false);
   const [showBlacklistManager, setShowBlacklistManager] = useState(false);
   const [showPotentialRepeats, setShowPotentialRepeats] = useState(false);
+  const [showPuzzleStats, setShowPuzzleStats] = useState(false);
+  const [wordCountSort, setWordCountSort] = useState<'length' | 'count'>(
+    'length'
+  );
   const [highlightColor, setHighlightColor] = useState(PRIMARY);
   const { showSnackbar } = useSnackbar();
   const [manualBanWord, setManualBanWord] = useState('');
@@ -1284,7 +1308,7 @@ const GridMode = ({
   );
 
   const submitManualBan = () => {
-    const word = manualBanWord.trim().toUpperCase();
+    const word = manualBanWord.replace(/\s+/g, '').toUpperCase();
 
     if (!word) return;
 
@@ -1305,6 +1329,16 @@ const GridMode = ({
         e.preventDefault();
         if (mkey.k === KeyK.Enter && !state.isEnteringRebus) {
           reRunAutofill();
+          return;
+        }
+        if (mkey.k === KeyK.AutofillPause) {
+          const nextPaused = !autofillPaused;
+          setAutofillPaused(nextPaused);
+          if (nextPaused) {
+            showSnackbar('Autofill Paused');
+          } else {
+            reRunAutofill();
+          }
           return;
         }
         if (mkey.k === KeyK.Exclamation) {
@@ -1330,7 +1364,15 @@ const GridMode = ({
         dispatch(kpa);
       }
     },
-    [dispatch, reRunAutofill, state.isEnteringRebus, getMostConstrainedEntry]
+    [
+      dispatch,
+      reRunAutofill,
+      state.isEnteringRebus,
+      getMostConstrainedEntry,
+      autofillPaused,
+      setAutofillPaused,
+      showSnackbar,
+    ]
   );
   useEventListener('keydown', physicalKeyboardHandler);
 
@@ -1516,9 +1558,20 @@ const GridMode = ({
   const toggleAutofillEnabled = useCallback(() => {
     if (autofillEnabled) {
       showSnackbar('Autofill Disabled');
+      setAutofillPaused(false);
     }
     setAutofillEnabled(!autofillEnabled);
-  }, [autofillEnabled, setAutofillEnabled, showSnackbar]);
+  }, [autofillEnabled, setAutofillEnabled, setAutofillPaused, showSnackbar]);
+
+  const toggleAutofillPaused = useCallback(() => {
+    const nextPaused = !autofillPaused;
+    setAutofillPaused(nextPaused);
+    if (nextPaused) {
+      showSnackbar('Autofill Paused');
+    } else {
+      reRunAutofill();
+    }
+  }, [autofillPaused, reRunAutofill, setAutofillPaused, showSnackbar]);
 
   const stats = useMemo(() => {
     let totalLength = 0;
@@ -1570,6 +1623,142 @@ const GridMode = ({
     state.grid.cells,
   ]);
 
+  const puzzleStats = useMemo(() => {
+    let across = 0;
+    let down = 0;
+
+    state.grid.entries.forEach((entry) => {
+      if (entry.direction === Direction.Across) {
+        across += 1;
+      } else {
+        down += 1;
+      }
+    });
+
+    const maxWordLength = Math.max(state.grid.width, state.grid.height);
+    const wordCountsByLength = Array.from(
+      { length: maxWordLength },
+      (_, i) => ({
+        length: i + 1,
+        count: state.grid.entries.filter(
+          (entry) => entry.cells.length === i + 1
+        ).length,
+      })
+    );
+
+    return {
+      across,
+      down,
+      totalWords: across + down,
+      blackSquarePercent:
+        stats.numTotal === 0 ? 0 : (100 * stats.numBlocks) / stats.numTotal,
+      averageWordLength: Number.isFinite(stats.averageLength)
+        ? stats.averageLength
+        : 0,
+      wordCountsByLength: wordCountsByLength.filter(({ count }) => count > 0),
+    };
+  }, [
+    state.grid.entries,
+    state.grid.width,
+    state.grid.height,
+    stats.averageLength,
+    stats.numBlocks,
+    stats.numTotal,
+  ]);
+
+  const sortedWordCounts = useMemo(() => {
+    const wordCounts = [...puzzleStats.wordCountsByLength];
+    if (wordCountSort === 'count') {
+      wordCounts.sort((a, b) => b.count - a.count || a.length - b.length);
+      return wordCounts;
+    }
+    wordCounts.sort((a, b) => a.length - b.length);
+    return wordCounts;
+  }, [puzzleStats.wordCountsByLength, wordCountSort]);
+
+  const shortWordCells = useMemo(() => {
+    const cells = new Set<number>();
+
+    const markShortRuns = (direction: Direction) => {
+      const isAcross = direction === Direction.Across;
+      const outerLimit = isAcross ? state.grid.height : state.grid.width;
+      const innerLimit = isAcross ? state.grid.width : state.grid.height;
+      const bars = isAcross ? state.grid.vBars : state.grid.hBars;
+
+      for (let outer = 0; outer < outerLimit; outer += 1) {
+        let run: number[] = [];
+
+        for (let inner = 0; inner < innerLimit; inner += 1) {
+          const row = isAcross ? outer : inner;
+          const col = isAcross ? inner : outer;
+          const index = row * state.grid.width + col;
+          const value = state.grid.cells[index];
+
+          if (value === BLOCK) {
+            if (run.length > 0 && run.length < 3) {
+              run.forEach((cell) => cells.add(cell));
+            }
+            run = [];
+            continue;
+          }
+
+          run.push(index);
+
+          const hasBarAfterCell =
+            inner < innerLimit - 1 && bars.has(index);
+
+          if (hasBarAfterCell) {
+            if (run.length < 3) {
+              run.forEach((cell) => cells.add(cell));
+            }
+            run = [];
+          }
+        }
+
+        if (run.length > 0 && run.length < 3) {
+          run.forEach((cell) => cells.add(cell));
+        }
+      }
+    };
+
+    markShortRuns(Direction.Across);
+    markShortRuns(Direction.Down);
+
+    return cells;
+  }, [
+    state.grid.cells,
+    state.grid.width,
+    state.grid.height,
+    state.grid.vBars,
+    state.grid.hBars,
+  ]);
+
+  const canRotateUnfilledGrid = useMemo(() => {
+    return state.grid.cells.every((cell) => cell === EMPTY || cell === BLOCK);
+  }, [state.grid.cells]);
+
+  const puzzleStatsTooltip = useMemo(
+    () =>
+      [
+        `Total Words: ${puzzleStats.totalWords}`,
+        `Size: ${state.grid.width} x ${state.grid.height}`,
+        `Black Squares: ${stats.numBlocks} (${puzzleStats.blackSquarePercent.toFixed(2)}%)`,
+        `Avg. Word Length: ${puzzleStats.averageWordLength.toFixed(2)}`,
+        `Word Counts: ${sortedWordCounts
+          .map(({ length, count }) => `${length}:${count}`)
+          .join(', ')}`,
+      ].join('\n'),
+    [
+      puzzleStats.totalWords,
+      puzzleStats.blackSquarePercent,
+      puzzleStats.averageWordLength,
+      sortedWordCounts,
+      state.grid.width,
+      state.grid.height,
+      stats.numBlocks,
+    ]
+  );
+
   const keyboardHandler = useCallback(
     (key: string) => {
       const mkey = fromKeyString(key);
@@ -1616,10 +1805,12 @@ const GridMode = ({
           <TopBar>
             <MemoizedTopBarChildren
               autofillEnabled={autofillEnabled}
+              autofillPaused={autofillPaused}
               autofillInProgress={props.autofillInProgress}
               autofilledGridLength={props.autofilledGrid.length}
               isAdmin={props.isAdmin}
               toggleAutofillEnabled={toggleAutofillEnabled}
+              toggleAutofillPaused={toggleAutofillPaused}
               getMostConstrainedEntry={getMostConstrainedEntry}
               dispatch={dispatch}
               reRunAutofill={reRunAutofill}
@@ -1761,9 +1952,7 @@ const GridMode = ({
                                       occurrence.startIndex
                                     )}
                                   </span>
-                                  <span
-                                    className={styles.potentialRepeatMatch}
-                                  >
+                                  <span className={styles.potentialRepeatMatch}>
                                     {occurrence.entryFill.slice(
                                       occurrence.startIndex,
                                       occurrence.endIndex + 1
@@ -1858,9 +2047,7 @@ const GridMode = ({
                                       occurrence.startIndex
                                     )}
                                   </span>
-                                  <span
-                                    className={styles.potentialRepeatMatch}
-                                  >
+                                  <span className={styles.potentialRepeatMatch}>
                                     {occurrence.entryFill.slice(
                                       occurrence.startIndex,
                                       occurrence.endIndex + 1
@@ -1933,13 +2120,21 @@ const GridMode = ({
           ''
         )}
         <div className={styles.squareAndColsWrap}>
-          <div style={{ margin: '8px 0', display: 'flex', gap: '6px' }}>
+          <div
+            style={{
+              margin: '8px 0',
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
             <input
               type="text"
               placeholder="Add word to blacklist"
               value={manualBanWord}
               onChange={(e) => {
-                setManualBanWord(e.target.value);
+                setManualBanWord(e.target.value.replace(/\s+/g, ''));
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -1954,7 +2149,218 @@ const GridMode = ({
               }}
             />
             <Button onClick={submitManualBan} text="Ban" />
+            <button
+              type="button"
+              title={puzzleStatsTooltip}
+              onClick={() => {
+                setShowPuzzleStats((value) => !value);
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.65rem 0.9rem',
+                border: '1px solid var(--secondary)',
+                borderRadius: '999px',
+                background: 'var(--bg)',
+                color: 'var(--text)',
+                cursor: 'pointer',
+                fontSize: '1rem',
+                fontWeight: 700,
+              }}
+            >
+              <span>Total Words: {puzzleStats.totalWords}</span>
+              <span style={{ fontSize: '0.9rem', fontWeight: 400 }}>
+                {showPuzzleStats ? 'Hide stats' : 'Show stats'}
+              </span>
+            </button>
+            {canRotateUnfilledGrid ? (
+              <>
+                <span
+                  style={{
+                    fontSize: '0.9rem',
+                    fontWeight: 600,
+                    color: 'var(--text)',
+                    opacity: 0.8,
+                    marginLeft: '0.15rem',
+                  }}
+                >
+                  Rotate grid
+                </span>
+                <button
+                  type="button"
+                  title="Rotate grid 90° left"
+                  aria-label="Rotate grid 90 degrees left"
+                  onClick={() => {
+                    dispatch({ type: 'ROTATEGRIDLEFT' });
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '2.5rem',
+                    height: '2.5rem',
+                    padding: 0,
+                    border: '1px solid var(--secondary)',
+                    borderRadius: '999px',
+                    background: 'var(--bg)',
+                    color: 'var(--text)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <FaUndo />
+                </button>
+                <button
+                  type="button"
+                  title="Rotate grid 90° right"
+                  aria-label="Rotate grid 90 degrees right"
+                  onClick={() => {
+                    dispatch({ type: 'ROTATEGRIDRIGHT' });
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '2.5rem',
+                    height: '2.5rem',
+                    padding: 0,
+                    border: '1px solid var(--secondary)',
+                    borderRadius: '999px',
+                    background: 'var(--bg)',
+                    color: 'var(--text)',
+                    cursor: 'pointer',
+                    transform: 'scaleX(-1)',
+                  }}
+                >
+                  <FaUndo />
+                </button>
+              </>
+            ) : null}
           </div>
+          {showPuzzleStats ? (
+            <section
+              style={{
+                margin: '0 0 1rem',
+                padding: '1rem 1.25rem',
+                border: '1px solid var(--secondary)',
+                borderRadius: '0.75rem',
+                background: 'var(--bg)',
+              }}
+            >
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns:
+                    'minmax(10rem, max-content) minmax(6rem, max-content)',
+                  gap: '0.35rem 1.25rem',
+                  alignItems: 'baseline',
+                }}
+              >
+                <div style={{ fontSize: '1rem', fontWeight: 700 }}>Size</div>
+                <div style={{ fontSize: '1rem' }}>
+                  {state.grid.width} x {state.grid.height}
+                </div>
+
+                <div style={{ fontSize: '1rem', fontWeight: 700 }}>
+                  Black Squares
+                </div>
+                <div style={{ fontSize: '1rem' }}>
+                  {stats.numBlocks} ({puzzleStats.blackSquarePercent.toFixed(2)}
+                  %)
+                </div>
+
+                <div style={{ fontSize: '1rem', fontWeight: 700 }}>
+                  Avg. Word Length
+                </div>
+                <div style={{ fontSize: '1rem' }}>
+                  {puzzleStats.averageWordLength.toFixed(2)}
+                </div>
+              </div>
+
+              <div style={{ marginTop: '1rem' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    margin: '0 0 0.75rem',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <h3 style={{ margin: 0, fontSize: '1rem' }}>Word Counts</h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWordCountSort((value) =>
+                        value === 'length' ? 'count' : 'length'
+                      );
+                    }}
+                    style={{
+                      padding: '0.25rem 0.55rem',
+                      border: '1px solid var(--secondary)',
+                      borderRadius: '999px',
+                      background: 'var(--bg)',
+                      color: 'var(--text)',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {wordCountSort === 'length'
+                      ? 'Sort: length'
+                      : 'Sort: most to least'}
+                  </button>
+                </div>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(6.5rem, 1fr))',
+                    gap: '0.6rem 0.75rem',
+                  }}
+                >
+                  {sortedWordCounts.map(({ length, count }) => (
+                    <div
+                      key={length}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'baseline',
+                        justifyContent: 'space-between',
+                        gap: '0.75rem',
+                        padding: '0.45rem 0.6rem',
+                        border: '1px solid var(--secondary)',
+                        borderRadius: '0.5rem',
+                        background: 'var(--bg-hover)',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: '1rem',
+                          fontWeight: 700,
+                          fontVariantNumeric: 'tabular-nums',
+                          color: 'var(--text)',
+                          opacity: 0.65,
+                        }}
+                      >
+                        {length}-letter
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          letterSpacing: '0.06em',
+                          textTransform: 'uppercase',
+                          color: 'var(--text)',
+                          opacity: 0.95,
+                        }}
+                      >
+                        {count}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          ) : null}
           <SquareAndCols
             leftIsActive={state.active.dir === Direction.Across}
             aspectRatio={state.grid.width / state.grid.height}
@@ -1969,6 +2375,7 @@ const GridMode = ({
                 autofill={props.autofillEnabled ? props.autofilledGrid : []}
                 symmetry={state.symmetry}
                 selection={state.selection}
+                shortWordCells={shortWordCells}
               />
             }
             left={fillLists.left}

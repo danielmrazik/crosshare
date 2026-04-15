@@ -44,6 +44,7 @@ interface GridViewProps {
   answers?: string[] | null;
   symmetry?: Symmetry | null;
   selection?: GridSelection;
+  shortWordCells?: Set<number>;
 }
 
 export const GridView = ({
@@ -197,6 +198,7 @@ export const GridView = ({
         refedCell={refedCells.some((p) => cellIndex(grid, p) === idx)}
         selected={selectedCells.some((p) => cellIndex(grid, p) === idx)}
         isSelecting={hasSelection}
+        shortWordCell={props.shortWordCells?.has(idx) ?? false}
         key={idx}
         number={number ? number.toString() : ''}
         row={Math.floor(idx / grid.width)}

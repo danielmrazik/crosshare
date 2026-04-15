@@ -460,6 +460,7 @@ export enum KeyK {
   Comma,
   Exclamation,
   Octothorp,
+  AutofillPause,
   AllowedCharacter,
   // Keys specific to on-screen keyboard
   NumLayout,
@@ -546,6 +547,8 @@ export function fromKeyboardEvent(event: {
         return KeyK.Exclamation;
       case '#':
         return KeyK.Octothorp;
+      case ';':
+        return KeyK.AutofillPause;
       // Keys specific to on-screen keyboard
       case '{num}':
         return KeyK.NumLayout;

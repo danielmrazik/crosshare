@@ -24,6 +24,7 @@
     "noImplicitThis": true,
     "strictNullChecks": true,
     "noUncheckedIndexedAccess": true,
+    "ignoreDeprecations": "6.0",
     "jsx": "react-jsx",
     "incremental": true
   },

@@ -100,6 +100,10 @@
   --current-cell-autofill: var(--autofill-on-secondary);
 }
 
+.cellContainerShortWord {
+  --current-cell-bg: color-mix(in srgb, rgb(180 45 45) 28%, var(--cell-bg));
+}
+
 .cq {
   container-type: size;
 }

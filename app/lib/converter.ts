@@ -354,17 +354,15 @@ class PuzWriter {
   }
 
   writeStrings(puzzle: ExportProps) {
-    let note = 'Created on crosshare.org';
     let author = puzzle.n;
     if (puzzle.gc) {
       author = puzzle.gc;
-      note = `Published by ${puzzle.n} on crosshare.org`;
     }
 
     const stringStart = this.buf.length;
     this.writeString(puzzle.t);
     this.writeString(author);
-    this.writeString(`Copyright ${author}, all rights reserved`);
+    this.writeString('');
     const clues: [number, string][] = [];
     for (const [i, clue] of puzzle.ac.entries()) {
       const clueNumber = puzzle.an[i];
@@ -384,7 +382,7 @@ class PuzWriter {
     for (const clue of clues) {
       this.writeString(clue[1]);
     }
-    this.writeString(puzzle.cn ? puzzle.cn + ' - ' + note : note);
+    this.writeString(puzzle.cn ?? '');
     return stringStart;
   }
 
