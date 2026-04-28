@@ -621,11 +621,10 @@ export const Builder = (
   const [blacklistWords, setBlacklistWords] = useState<string[]>(() =>
     getBlacklistArray()
   );
-  const [tempBlacklistWords, setTempBlacklistWords] = useState<string[]>(
-    () =>
-      Array.isArray(savedInProgress?.tempBlacklistedWords)
-        ? savedInProgress.tempBlacklistedWords.map(normalizeBlacklistWord)
-        : []
+  const [tempBlacklistWords, setTempBlacklistWords] = useState<string[]>(() =>
+    Array.isArray(savedInProgress?.tempBlacklistedWords)
+      ? savedInProgress.tempBlacklistedWords.map(normalizeBlacklistWord)
+      : []
   );
   const [reviewedPotentialRepeatKeys, setReviewedPotentialRepeatKeys] =
     useState<Set<string>>(() => {
@@ -672,7 +671,7 @@ export const Builder = (
       minMatches: diagnostics[0]?.matches ?? null,
       maxMatches:
         diagnostics.length > 0
-          ? diagnostics[diagnostics.length - 1]?.matches ?? null
+          ? (diagnostics[diagnostics.length - 1]?.matches ?? null)
           : null,
       diagnostics,
     };
@@ -1748,7 +1747,14 @@ const GridMode = ({
       }
     }
     return { left, right };
-  }, [state.grid, state.active, dispatch, banWord, tempBanWord, combinedBlacklistWords]);
+  }, [
+    state.grid,
+    state.active,
+    dispatch,
+    banWord,
+    tempBanWord,
+    combinedBlacklistWords,
+  ]);
 
   const potentialRepeats = useMemo(
     () => getPotentialRepeats(state.grid),
@@ -1945,8 +1951,7 @@ const GridMode = ({
 
           run.push(index);
 
-          const hasBarAfterCell =
-            inner < innerLimit - 1 && bars.has(index);
+          const hasBarAfterCell = inner < innerLimit - 1 && bars.has(index);
 
           if (hasBarAfterCell) {
             if (run.length < 3) {
@@ -2023,7 +2028,8 @@ const GridMode = ({
     if (openEntriesCount === 0) {
       return {
         summary: 'No open entries remain.',
-        detail: 'The grid is fully filled, so there is nothing left for autofill to search.',
+        detail:
+          'The grid is fully filled, so there is nothing left for autofill to search.',
       };
     }
 
@@ -2748,7 +2754,8 @@ const GridMode = ({
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(6.5rem, 1fr))',
+                    gridTemplateColumns:
+                      'repeat(auto-fit, minmax(6.5rem, 1fr))',
                     gap: '0.6rem 0.75rem',
                   }}
                 >
