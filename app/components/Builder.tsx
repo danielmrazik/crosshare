@@ -115,6 +115,21 @@ interface PotentialFillItemProps {
   value: [string, number];
   dispatch: Dispatch<ClickedFillAction>;
 }
+
+function normalizeBlacklistWord(word: string): string {
+  return word.replace(/\s+/g, '').toUpperCase();
+}
+
+function mergeBlacklistWords(...wordLists: string[][]): string[] {
+  const merged = new Set<string>();
+  wordLists.forEach((words) => {
+    words.forEach((word) => {
+      merged.add(normalizeBlacklistWord(word));
+    });
+  });
+  return Array.from(merged).sort();
+}
+
 const PotentialFillItem = (props: PotentialFillItemProps) => {
   function click(e: MouseEvent) {
     e.preventDefault();
@@ -138,12 +153,14 @@ function PotentialFillRow({
   style,
   values,
   onBanWord,
+  onTempBanWord,
   ...props
 }: RowComponentProps<{
   entryIndex: number;
   dispatch: Dispatch<ClickedFillAction>;
   values: [string, number][];
   onBanWord: (word: string) => void;
+  onTempBanWord: (word: string) => void;
 }>) {
   const value = values[index];
   if (value === undefined) {
@@ -196,6 +213,33 @@ function PotentialFillRow({
       >
         Ban
       </button>
+      <button
+        type="button"
+        className={styles.subtleBanButton}
+        style={{
+          flex: '0 0 auto',
+          padding: '2px 8px',
+          fontSize: '0.8rem',
+          lineHeight: 1.2,
+          cursor: 'pointer',
+        }}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          const confirmed = window.confirm(
+            `Temporarily ban "${word}" for this puzzle only?`
+          );
+
+          if (!confirmed) {
+            return;
+          }
+
+          onTempBanWord(word);
+        }}
+      >
+        Temp
+      </button>
     </div>
   );
 }
@@ -208,6 +252,7 @@ interface PotentialFillListProps {
   values: [string, number][];
   dispatch: Dispatch<ClickedFillAction>;
   onBanWord: (word: string) => void;
+  onTempBanWord: (word: string) => void;
 }
 const PotentialFillList = (props: PotentialFillListProps) => {
   const listRef = useListRef(null);
@@ -239,6 +284,7 @@ const PotentialFillList = (props: PotentialFillListProps) => {
             dispatch: props.dispatch,
             values: visibleValues,
             onBanWord: props.onBanWord,
+            onTempBanWord: props.onTempBanWord,
           }}
           listRef={listRef}
           rowCount={visibleValues.length}
@@ -284,9 +330,13 @@ const initializeState = (props: BuilderProps & AuthProps): BuilderState => {
   });
 };
 
-const BlacklistManager = ({ onChange }: { onChange?: () => void }) => {
+const BlacklistManager = (props: {
+  onChange?: () => void;
+  tempWords: string[];
+  setTempWords: Dispatch<SetStateAction<string[]>>;
+}) => {
+  const { onChange, tempWords, setTempWords } = props;
   const [words, setWords] = useState<string[]>(() => getBlacklistArray());
-  const [newWord, setNewWord] = useState('');
   const [bulkWords, setBulkWords] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -294,25 +344,10 @@ const BlacklistManager = ({ onChange }: { onChange?: () => void }) => {
     setWords(getBlacklistArray());
   }, []);
 
-  const addWord = useCallback(() => {
-    const normalized = newWord.trim().toUpperCase();
-    if (!normalized) {
-      return;
-    }
-    if (words.includes(normalized)) {
-      setNewWord('');
-      return;
-    }
-    addToBlacklist(normalized);
-    setNewWord('');
-    refresh();
-    onChange?.();
-  }, [newWord, words, refresh, onChange]);
-
   const addBulkWords = useCallback(() => {
     const parsed = bulkWords
       .split(/\r?\n|,|\t| /)
-      .map((word) => word.trim().toUpperCase())
+      .map(normalizeBlacklistWord)
       .filter(Boolean);
 
     if (parsed.length === 0) {
@@ -361,129 +396,206 @@ const BlacklistManager = ({ onChange }: { onChange?: () => void }) => {
 
   return (
     <div>
-      <div
+      <section
         style={{
-          display: 'flex',
-          gap: '0.5rem',
           marginBottom: '1rem',
-          alignItems: 'center',
+          paddingBottom: '1rem',
+          borderBottom: '1px solid var(--secondary)',
         }}
       >
-        <input
-          type="text"
-          value={newWord}
-          placeholder="Add one word"
-          onChange={(e) => {
-            setNewWord(e.target.value);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              addWord();
-            }
-          }}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            padding: '6px 8px',
-          }}
-        />
-        <Button onClick={addWord} text="Add" />
-      </div>
-
-      <div style={{ marginBottom: '1rem' }}>
-        <textarea
-          value={bulkWords}
-          placeholder="Bulk add words: paste words separated by new lines, commas, spaces, or tabs"
-          onChange={(e) => {
-            setBulkWords(e.target.value);
-          }}
-          style={{
-            width: '100%',
-            minHeight: '120px',
-            padding: '8px',
-            resize: 'vertical',
-            boxSizing: 'border-box',
-          }}
-        />
+        <div style={{ marginBottom: '0.5rem' }}>
+          <strong>Puzzle-Only Temp Bans:</strong> {tempWords.length}
+        </div>
         <div
           style={{
-            display: 'flex',
-            gap: '0.5rem',
-            marginTop: '0.5rem',
-            flexWrap: 'wrap',
+            marginBottom: '0.75rem',
+            color: 'var(--text)',
+            opacity: 0.75,
+            fontSize: '0.92rem',
           }}
         >
-          <Button onClick={addBulkWords} text="Bulk Add" />
-          <Button onClick={copyBlacklist} text="Copy All" />
-          <Button onClick={downloadBlacklist} text="Export .txt" />
+          These apply only to the current puzzle and reset when you start a new
+          puzzle.
         </div>
-      </div>
-
-      <div style={{ marginBottom: '1rem' }}>
-        <input
-          type="text"
-          value={searchTerm}
-          placeholder="Search blacklist"
-          onChange={(e) => {
-            setSearchTerm(e.target.value);
-          }}
-          style={{
-            width: '100%',
-            padding: '6px 8px',
-            boxSizing: 'border-box',
-          }}
-        />
-      </div>
-
-      {words.length === 0 ? (
-        <div>No blacklisted words.</div>
-      ) : (
-        <div>
+        {tempWords.length === 0 ? (
           <div style={{ marginBottom: '0.5rem' }}>
-            <strong>Total:</strong> {words.length}
-            {' · '}
-            <strong>Showing:</strong> {filteredWords.length}
+            No temporary bans for this puzzle yet.
           </div>
-          {filteredWords.length === 0 ? (
-            <div>No matches found.</div>
-          ) : (
-            filteredWords.map((word) => (
-              <div
+        ) : (
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '0.5rem',
+              marginBottom: '0.75rem',
+            }}
+          >
+            {tempWords.map((word) => (
+              <button
                 key={word}
+                type="button"
+                className={styles.subtleBanButton}
+                onClick={() => {
+                  setTempWords((previous) =>
+                    previous.filter((candidate) => candidate !== word)
+                  );
+                  onChange?.();
+                }}
                 style={{
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '0.5rem',
-                  marginBottom: '0.25rem',
+                  gap: '0.45rem',
+                  padding: '0.35rem 0.65rem',
+                  border: '1px solid var(--secondary)',
+                  borderRadius: '999px',
+                  background: 'var(--bg-hover)',
+                  color: 'var(--text)',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
                 }}
               >
-                <span style={{ fontFamily: 'monospace', minWidth: '120px' }}>
-                  {word}
-                </span>
-                <button
-                  type="button"
-                  style={{
-                    padding: '2px 8px',
-                    fontSize: '0.8rem',
-                    lineHeight: 1.2,
-                    cursor: 'pointer',
-                  }}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    removeFromBlacklist(word);
-                    refresh();
-                    onChange?.();
-                  }}
-                >
-                  Unban
-                </button>
-              </div>
-            ))
-          )}
+                <span>{word}</span>
+                <span style={{ opacity: 0.72 }}>Remove</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {tempWords.length > 0 ? (
+          <Button
+            onClick={() => {
+              setTempWords([]);
+              onChange?.();
+            }}
+            text="Clear Temp Bans"
+          />
+        ) : null}
+      </section>
+
+      <section>
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ marginBottom: '0.5rem' }}>
+            <strong>Add to Global Blacklist</strong>
+          </div>
+          <textarea
+            value={bulkWords}
+            placeholder="Paste words separated by spaces, commas, tabs, or new lines"
+            rows={1}
+            onChange={(e) => {
+              setBulkWords(e.target.value);
+            }}
+            style={{
+              width: '100%',
+              minHeight: '2.75rem',
+              maxHeight: '10rem',
+              padding: '8px',
+              resize: 'vertical',
+              boxSizing: 'border-box',
+            }}
+          />
+          <div
+            style={{
+              display: 'flex',
+              gap: '0.5rem',
+              marginTop: '0.5rem',
+              flexWrap: 'wrap',
+            }}
+          >
+            <Button onClick={addBulkWords} text="Add Words" />
+            <Button onClick={copyBlacklist} text="Copy All" />
+            <Button onClick={downloadBlacklist} text="Export .txt" />
+          </div>
         </div>
-      )}
+
+        <div style={{ marginBottom: '1rem' }}>
+          <input
+            type="text"
+            value={searchTerm}
+            placeholder="Search blacklist"
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+            }}
+            style={{
+              width: '100%',
+              padding: '6px 8px',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        <div style={{ marginBottom: '0.5rem' }}>
+          <strong>Global Blacklist</strong>
+        </div>
+        {words.length === 0 ? (
+          <div>No blacklisted words.</div>
+        ) : (
+          <div>
+            <div style={{ marginBottom: '0.5rem' }}>
+              <strong>Total:</strong> {words.length}
+              {' · '}
+              <strong>Showing:</strong> {filteredWords.length}
+            </div>
+            {filteredWords.length === 0 ? (
+              <div>No matches found.</div>
+            ) : (
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '0.5rem 0.75rem',
+                }}
+              >
+                {filteredWords.map((word) => (
+                  <div
+                    key={word}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      width: 'min(100%, 18rem)',
+                      gap: '0.75rem',
+                      padding: '0.45rem 0.6rem',
+                      border: '1px solid var(--secondary)',
+                      borderRadius: '0.75rem',
+                      background: 'var(--bg-hover)',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: 'monospace',
+                        fontSize: '0.98rem',
+                        fontWeight: 700,
+                        minWidth: 0,
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
+                      {word}
+                    </span>
+                    <button
+                      type="button"
+                      className={styles.subtleBanButton}
+                      style={{
+                        flex: '0 0 auto',
+                        padding: '2px 8px',
+                        fontSize: '0.8rem',
+                        lineHeight: 1.2,
+                        cursor: 'pointer',
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        removeFromBlacklist(word);
+                        refresh();
+                        onChange?.();
+                      }}
+                    >
+                      Unban
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
     </div>
   );
 };
@@ -506,43 +618,80 @@ export const Builder = (
 
   const [autofilledGrid, setAutofilledGrid] = useState<string[]>([]);
   const [autofillInProgress, setAutofillInProgress] = useState(false);
+  const [blacklistWords, setBlacklistWords] = useState<string[]>(() =>
+    getBlacklistArray()
+  );
+  const [tempBlacklistWords, setTempBlacklistWords] = useState<string[]>(
+    () =>
+      Array.isArray(savedInProgress?.tempBlacklistedWords)
+        ? savedInProgress.tempBlacklistedWords.map(normalizeBlacklistWord)
+        : []
+  );
   const [reviewedPotentialRepeatKeys, setReviewedPotentialRepeatKeys] =
     useState<Set<string>>(() => {
       const reviewedPotentialRepeats: string[] =
         savedInProgress?.reviewedPotentialRepeats ?? [];
       return new Set<string>(reviewedPotentialRepeats);
     });
+  const combinedBlacklistWords = useMemo(
+    () => mergeBlacklistWords(blacklistWords, tempBlacklistWords),
+    [blacklistWords, tempBlacklistWords]
+  );
 
-  const getMostConstrainedEntry: () => number | null = useCallback(() => {
+  const autofillEntryStats = useMemo(() => {
     if (!WordDB.wordDB) {
       throw new Error('missing db!');
     }
     const openEntries = state.grid.entries
       .filter((e) => e.completedWord === null)
-      .map((e): [ViewableEntry, number] => [
-        e,
-        numMatchesForEntry(
+      .map((e) => {
+        const pattern = e.cells.map((p) => valAt(state.grid, p)).join('');
+        const matches = numMatchesForEntry(
           addAutofillFieldsToEntry({
             ...e,
-            pattern: e.cells.map((p) => valAt(state.grid, p)).join(''),
+            pattern,
           })
-        ),
-      ])
-      .sort(([_a, aMatches], [_b, bMatches]) => aMatches - bMatches);
-    if (openEntries.length) {
-      return openEntries[0]?.[0]?.index ?? null;
-    }
-    return null;
+        );
+        return { entry: e, pattern, matches };
+      })
+      .sort((a, b) => a.matches - b.matches);
+
+    const diagnostics: AutofillDiagnosticEntry[] = openEntries.map(
+      ({ entry, pattern, matches }) => ({
+        entryIndex: entry.index,
+        label: entryString(entry),
+        pattern,
+        matches,
+        cells: entry.cells,
+      })
+    );
+
+    return {
+      mostConstrainedEntry: diagnostics[0]?.entryIndex ?? null,
+      openEntriesCount: diagnostics.length,
+      minMatches: diagnostics[0]?.matches ?? null,
+      maxMatches:
+        diagnostics.length > 0
+          ? diagnostics[diagnostics.length - 1]?.matches ?? null
+          : null,
+      diagnostics,
+    };
   }, [state.grid]);
+
+  const getMostConstrainedEntry: () => number | null = useCallback(() => {
+    return autofillEntryStats.mostConstrainedEntry;
+  }, [autofillEntryStats.mostConstrainedEntry]);
 
   const [autofillEnabled, setAutofillEnabled] = useState(true);
   const [autofillPaused, setAutofillPaused] = useState(false);
+  const priorPuzzleId = useRef<string>(state.id);
 
   // We need a ref to the current grid so we can verify it in worker.onmessage
   const currentCells = useRef(state.grid.cells);
   const currentVBars = useRef(state.grid.vBars);
   const currentHBars = useRef(state.grid.hBars);
   const currentGrid = useRef(state.grid);
+  const currentBlacklistWords = useRef(combinedBlacklistWords);
   const priorSolves = useRef<[string[], Set<number>, Set<number>, string][]>(
     []
   );
@@ -564,12 +713,16 @@ export const Builder = (
       worker.current.onmessage = (e) => {
         const data = e.data as WorkerMessage;
         if (isAutofillResultMessage(data)) {
-          const blacklistWords = getBlacklistArray();
+          const matchesCurrentInput =
+            currentCells.current.length === data.input[0].length &&
+            currentCells.current.every((c, i) => c === data.input[0][i]) &&
+            eqSet(currentVBars.current, data.input[1]) &&
+            eqSet(currentHBars.current, data.input[2]);
           if (
             hasBlacklistedEntry(
               currentGrid.current,
               data.result,
-              blacklistWords
+              currentBlacklistWords.current
             )
           ) {
             console.warn('Ignoring autofill result with blacklisted entry');
@@ -581,12 +734,7 @@ export const Builder = (
             data.input[2],
             latestAutofillBlacklist.current,
           ]);
-          if (
-            currentCells.current.length === data.input[0].length &&
-            currentCells.current.every((c, i) => c === data.input[0][i]) &&
-            eqSet(currentVBars.current, data.input[1]) &&
-            eqSet(currentHBars.current, data.input[2])
-          ) {
+          if (matchesCurrentInput) {
             setAutofilledGrid(Array.from(data.result));
           }
         } else if (isAutofillCompleteMessage(data)) {
@@ -625,8 +773,8 @@ export const Builder = (
     currentVBars.current = state.grid.vBars;
     currentHBars.current = state.grid.hBars;
     currentGrid.current = state.grid;
-    const blacklistWords = getBlacklistArray();
-    const blacklistKey = blacklistWords.join('\n');
+    currentBlacklistWords.current = combinedBlacklistWords;
+    const blacklistKey = combinedBlacklistWords.join('\n');
     if (
       priorWidth.current !== state.grid.width ||
       priorHeight.current !== state.grid.height
@@ -663,7 +811,7 @@ export const Builder = (
       }
       if (
         match &&
-        hasBlacklistedEntry(state.grid, priorSolve, blacklistWords)
+        hasBlacklistedEntry(state.grid, priorSolve, combinedBlacklistWords)
       ) {
         match = false;
       }
@@ -680,7 +828,7 @@ export const Builder = (
     const autofill: AutofillMessage = {
       type: 'autofill',
       grid: state.grid.cells,
-      blacklist: blacklistWords,
+      blacklist: combinedBlacklistWords,
       width: state.grid.width,
       height: state.grid.height,
       vBars: state.grid.vBars,
@@ -692,9 +840,21 @@ export const Builder = (
     state.grid,
     autofillEnabled,
     autofillPaused,
+    combinedBlacklistWords,
     setAutofilledGrid,
     setAutofillInProgress,
   ]);
+  useEffect(() => {
+    currentBlacklistWords.current = combinedBlacklistWords;
+  }, [combinedBlacklistWords]);
+
+  const isAutofillFailure =
+    autofillEnabled &&
+    !autofillPaused &&
+    !autofillInProgress &&
+    autofillEntryStats.openEntriesCount > 0 &&
+    autofilledGrid.length === 0;
+
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       runAutofill();
@@ -706,6 +866,10 @@ export const Builder = (
   }, [runAutofill]);
 
   useEffect(() => {
+    if (priorPuzzleId.current !== state.id && tempBlacklistWords.length > 0) {
+      return;
+    }
+
     const inProgress: PuzzleInProgressT = {
       id: state.id,
       width: state.grid.width,
@@ -738,6 +902,7 @@ export const Builder = (
         ? state.contestHasPrize
         : undefined,
       reviewedPotentialRepeats: Array.from(reviewedPotentialRepeatKeys),
+      tempBlacklistedWords: tempBlacklistWords,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(inProgress));
   }, [
@@ -764,7 +929,15 @@ export const Builder = (
     state.contestAnswers,
     state.contestHasPrize,
     reviewedPotentialRepeatKeys,
+    tempBlacklistWords,
   ]);
+
+  useEffect(() => {
+    if (priorPuzzleId.current !== state.id) {
+      priorPuzzleId.current = state.id;
+      setTempBlacklistWords([]);
+    }
+  }, [state.id]);
 
   const reRunAutofill = useCallback(() => {
     priorSolves.current = [];
@@ -825,6 +998,15 @@ export const Builder = (
       state={state}
       dispatch={dispatch}
       setClueMode={setClueMode}
+      blacklistWords={blacklistWords}
+      setBlacklistWords={setBlacklistWords}
+      tempBlacklistWords={tempBlacklistWords}
+      setTempBlacklistWords={setTempBlacklistWords}
+      autofillOpenEntriesCount={autofillEntryStats.openEntriesCount}
+      autofillMinMatches={autofillEntryStats.minMatches}
+      autofillMaxMatches={autofillEntryStats.maxMatches}
+      autofillDiagnostics={autofillEntryStats.diagnostics}
+      isAutofillFailure={isAutofillFailure}
       reviewedPotentialRepeatKeys={reviewedPotentialRepeatKeys}
       setReviewedPotentialRepeatKeys={setReviewedPotentialRepeatKeys}
     />
@@ -1024,6 +1206,14 @@ interface PotentialRepeatOccurrence {
 interface PotentialRepeat {
   word: string;
   occurrences: PotentialRepeatOccurrence[];
+}
+
+interface AutofillDiagnosticEntry {
+  entryIndex: number;
+  label: string;
+  pattern: string;
+  matches: number;
+  cells: Position[];
 }
 
 const potentialRepeatKey = (repeat: PotentialRepeat): string => {
@@ -1260,7 +1450,16 @@ interface GridModeProps {
   state: BuilderState;
   dispatch: Dispatch<PuzzleAction>;
   setClueMode: (val: boolean) => void;
+  blacklistWords: string[];
+  setBlacklistWords: Dispatch<SetStateAction<string[]>>;
+  tempBlacklistWords: string[];
+  setTempBlacklistWords: Dispatch<SetStateAction<string[]>>;
   getMostConstrainedEntry: () => number | null;
+  autofillOpenEntriesCount: number;
+  autofillMinMatches: number | null;
+  autofillMaxMatches: number | null;
+  autofillDiagnostics: AutofillDiagnosticEntry[];
+  isAutofillFailure: boolean;
   reviewedPotentialRepeatKeys: Set<string>;
   setReviewedPotentialRepeatKeys: Dispatch<SetStateAction<Set<string>>>;
 }
@@ -1274,7 +1473,15 @@ const GridMode = ({
   setReviewedPotentialRepeatKeys,
   ...props
 }: GridModeProps) => {
-  const { autofillPaused, setAutofillPaused } = props;
+  const {
+    autofillPaused,
+    setAutofillPaused,
+    blacklistWords: globalBlacklistWords,
+    setBlacklistWords: setGlobalBlacklistWords,
+    tempBlacklistWords,
+    setTempBlacklistWords,
+    isAutofillFailure,
+  } = props;
   const [muted, setMuted] = usePersistedBoolean('muted', true);
   const [toggleKeyboard, setToggleKeyboard] = usePersistedBoolean(
     'keyboard',
@@ -1290,31 +1497,61 @@ const GridMode = ({
   const [highlightColor, setHighlightColor] = useState(PRIMARY);
   const { showSnackbar } = useSnackbar();
   const [manualBanWord, setManualBanWord] = useState('');
-  const [blacklistWords, setBlacklistWords] = useState<string[]>(() =>
-    getBlacklistArray()
-  );
 
   const refreshBlacklistConsumers = useCallback(() => {
-    setBlacklistWords(getBlacklistArray());
+    setGlobalBlacklistWords(getBlacklistArray());
     reRunAutofill();
-  }, [reRunAutofill]);
+  }, [setGlobalBlacklistWords, reRunAutofill]);
 
   const banWord = useCallback(
     (word: string) => {
-      addToBlacklist(word.trim().toUpperCase());
+      addToBlacklist(normalizeBlacklistWord(word));
       refreshBlacklistConsumers();
     },
     [refreshBlacklistConsumers]
   );
 
+  const tempBanWord = useCallback(
+    (word: string) => {
+      const normalized = normalizeBlacklistWord(word);
+      if (!normalized) {
+        return;
+      }
+      if (globalBlacklistWords.includes(normalized)) {
+        return;
+      }
+      setTempBlacklistWords((previous) =>
+        previous.includes(normalized)
+          ? previous
+          : [...previous, normalized].sort()
+      );
+      reRunAutofill();
+    },
+    [globalBlacklistWords, setTempBlacklistWords, reRunAutofill]
+  );
+
   const submitManualBan = () => {
-    const word = manualBanWord.replace(/\s+/g, '').toUpperCase();
+    const word = normalizeBlacklistWord(manualBanWord);
 
     if (!word) return;
 
     banWord(word);
     setManualBanWord('');
   };
+
+  const submitManualTempBan = () => {
+    const word = normalizeBlacklistWord(manualBanWord);
+
+    if (!word) return;
+
+    tempBanWord(word);
+    setManualBanWord('');
+  };
+
+  const combinedBlacklistWords = useMemo(
+    () => mergeBlacklistWords(globalBlacklistWords, tempBlacklistWords),
+    [globalBlacklistWords, tempBlacklistWords]
+  );
 
   const usedHighlightColors = useMemo(() => {
     return Array.from(state.grid.cellStyles.keys()).filter(
@@ -1417,7 +1654,7 @@ const GridMode = ({
   useEventListener('paste', pasteHandler);
 
   const fillLists = useMemo(() => {
-    const blacklist = new Set(blacklistWords);
+    const blacklist = new Set(combinedBlacklistWords);
     let left = <></>;
     let right = <></>;
     const [entry, cross] = entryAndCrossAtPosition(state.grid, state.active);
@@ -1463,6 +1700,7 @@ const GridMode = ({
             entryIndex={cross.index}
             dispatch={dispatch}
             onBanWord={banWord}
+            onTempBanWord={tempBanWord}
           />
         );
       } else {
@@ -1475,6 +1713,7 @@ const GridMode = ({
             entryIndex={cross.index}
             dispatch={dispatch}
             onBanWord={banWord}
+            onTempBanWord={tempBanWord}
           />
         );
       }
@@ -1490,6 +1729,7 @@ const GridMode = ({
             entryIndex={entry.index}
             dispatch={dispatch}
             onBanWord={banWord}
+            onTempBanWord={tempBanWord}
           />
         );
       } else {
@@ -1502,12 +1742,13 @@ const GridMode = ({
             entryIndex={entry.index}
             dispatch={dispatch}
             onBanWord={banWord}
+            onTempBanWord={tempBanWord}
           />
         );
       }
     }
     return { left, right };
-  }, [state.grid, state.active, dispatch, banWord, blacklistWords]);
+  }, [state.grid, state.active, dispatch, banWord, tempBanWord, combinedBlacklistWords]);
 
   const potentialRepeats = useMemo(
     () => getPotentialRepeats(state.grid),
@@ -1759,6 +2000,160 @@ const GridMode = ({
     ]
   );
 
+  const autofillStatusExplanation = useMemo(() => {
+    const blacklistCount = combinedBlacklistWords.length;
+    const minMatches = props.autofillMinMatches;
+    const maxMatches = props.autofillMaxMatches;
+    const openEntriesCount = props.autofillOpenEntriesCount;
+
+    if (!autofillEnabled) {
+      return {
+        summary: 'Autofill is turned off.',
+        detail: 'Enable autofill to resume suggestions.',
+      };
+    }
+
+    if (autofillPaused) {
+      return {
+        summary: 'Autofill is paused.',
+        detail: 'Resume autofill to continue searching from the current grid.',
+      };
+    }
+
+    if (openEntriesCount === 0) {
+      return {
+        summary: 'No open entries remain.',
+        detail: 'The grid is fully filled, so there is nothing left for autofill to search.',
+      };
+    }
+
+    if (minMatches === 0) {
+      return {
+        summary: 'At least one open entry has no matches.',
+        detail:
+          'Autofill is likely stuck because one slot has zero wordlist matches under the current crossings.',
+      };
+    }
+
+    if (maxMatches !== null && maxMatches >= 5000) {
+      return {
+        summary: 'The search space is very wide right now.',
+        detail:
+          'One or more open entries still have thousands of possible fills, so the solver has more combinations to explore.',
+      };
+    }
+
+    if (openEntriesCount >= 20) {
+      return {
+        summary: 'There are still many open entries.',
+        detail:
+          'Autofill is exploring a larger unfinished section, which can delay the first useful fill.',
+      };
+    }
+
+    if (blacklistCount >= 5000) {
+      return {
+        summary: 'Your blacklist is large enough to matter.',
+        detail:
+          'A very large blacklist can add overhead and may remove many otherwise-usable candidates.',
+      };
+    }
+
+    if (minMatches !== null && minMatches <= 5) {
+      return {
+        summary: 'The grid is tightly constrained.',
+        detail:
+          'A very low-match slot can make the solver backtrack more before it finds a workable path.',
+      };
+    }
+
+    return {
+      summary: 'Autofill is still exploring the current fill.',
+      detail:
+        'Nothing looks obviously wrong; this is most likely the current puzzle shape and fill complexity.',
+    };
+  }, [
+    autofillEnabled,
+    autofillPaused,
+    props.autofillMinMatches,
+    props.autofillMaxMatches,
+    props.autofillOpenEntriesCount,
+    combinedBlacklistWords.length,
+  ]);
+
+  const [showAutofillStatusLine, setShowAutofillStatusLine] = useState(false);
+  const [showAutofillStatusDetails, setShowAutofillStatusDetails] =
+    useState(false);
+  const highlightedAutofillEntries = useMemo(
+    () => props.autofillDiagnostics.slice(0, 5),
+    [props.autofillDiagnostics]
+  );
+  const autofillDiagnosticCellColors = useMemo(() => {
+    if (!showAutofillStatusLine || !isAutofillFailure) {
+      return undefined;
+    }
+
+    const colors = new Array<number | undefined>(state.grid.cells.length);
+    highlightedAutofillEntries.forEach((entry) => {
+      const alpha =
+        entry.matches === 0
+          ? 0.82
+          : entry.matches <= 2
+            ? 0.66
+            : entry.matches <= 5
+              ? 0.52
+              : entry.matches <= 25
+                ? 0.38
+                : 0.24;
+
+      entry.cells.forEach((cell) => {
+        const index = cell.row * state.grid.width + cell.col;
+        colors[index] = Math.max(colors[index] ?? 0, alpha);
+      });
+    });
+
+    return colors;
+  }, [
+    highlightedAutofillEntries,
+    isAutofillFailure,
+    showAutofillStatusLine,
+    state.grid.cells.length,
+    state.grid.width,
+  ]);
+
+  useEffect(() => {
+    if (!autofillEnabled || autofillPaused || props.autofilledGrid.length > 0) {
+      setShowAutofillStatusLine(false);
+      setShowAutofillStatusDetails(false);
+      return;
+    }
+
+    if (isAutofillFailure) {
+      setShowAutofillStatusLine(true);
+      return;
+    }
+
+    if (!props.autofillInProgress) {
+      setShowAutofillStatusLine(false);
+      setShowAutofillStatusDetails(false);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setShowAutofillStatusLine(true);
+    }, 5000);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [
+    autofillEnabled,
+    autofillPaused,
+    isAutofillFailure,
+    props.autofillInProgress,
+    props.autofilledGrid.length,
+  ]);
+
   const keyboardHandler = useCallback(
     (key: string) => {
       const mkey = fromKeyString(key);
@@ -1766,6 +2161,16 @@ const GridMode = ({
         const kpa: KeypressAction = { type: 'KEYPRESS', key: mkey };
         dispatch(kpa);
       }
+    },
+    [dispatch]
+  );
+
+  const jumpToAutofillEntry = useCallback(
+    (entryIndex: number) => {
+      dispatch({
+        type: 'CLICKEDENTRY',
+        entryIndex,
+      } as ClickedEntryAction);
     },
     [dispatch]
   );
@@ -1870,7 +2275,11 @@ const GridMode = ({
             }}
           >
             <h2>Blacklisted Words</h2>
-            <BlacklistManager onChange={refreshBlacklistConsumers} />
+            <BlacklistManager
+              onChange={reRunAutofill}
+              tempWords={props.tempBlacklistWords}
+              setTempWords={props.setTempBlacklistWords}
+            />
           </Overlay>
         ) : (
           ''
@@ -2149,6 +2558,7 @@ const GridMode = ({
               }}
             />
             <Button onClick={submitManualBan} text="Ban" />
+            <Button onClick={submitManualTempBan} text="Temp Ban" />
             <button
               type="button"
               title={puzzleStatsTooltip}
@@ -2174,6 +2584,30 @@ const GridMode = ({
                 {showPuzzleStats ? 'Hide stats' : 'Show stats'}
               </span>
             </button>
+            {showAutofillStatusLine ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAutofillStatusDetails((value) => !value);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.65rem 0.9rem',
+                  border: '1px solid var(--secondary)',
+                  borderRadius: '999px',
+                  background: 'var(--bg)',
+                  color: 'var(--text)',
+                  cursor: 'pointer',
+                  fontSize: '0.92rem',
+                  fontWeight: 400,
+                  opacity: 0.62,
+                }}
+              >
+                <span>{autofillStatusExplanation.summary}</span>
+              </button>
+            ) : null}
             {canRotateUnfilledGrid ? (
               <>
                 <span
@@ -2361,22 +2795,125 @@ const GridMode = ({
               </div>
             </section>
           ) : null}
+          {showAutofillStatusLine && showAutofillStatusDetails ? (
+            <section
+              style={{
+                margin: '0 0 1rem',
+                padding: '1rem 1.25rem',
+                border: '1px solid var(--secondary)',
+                borderRadius: '0.75rem',
+                background: 'var(--bg)',
+                color: 'var(--text)',
+              }}
+            >
+              {highlightedAutofillEntries.length > 0 ? (
+                <div>
+                  <div
+                    style={{
+                      fontSize: '0.92rem',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Highlighted trouble spots
+                  </div>
+                  <div
+                    style={{
+                      marginTop: '0.25rem',
+                      fontSize: '0.9rem',
+                      opacity: 0.8,
+                    }}
+                  >
+                    Darker shading means fewer matches. Click a slot to jump to
+                    it.
+                  </div>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns:
+                        'repeat(auto-fit, minmax(16rem, 1fr))',
+                      gap: '0.75rem',
+                      marginTop: '0.75rem',
+                    }}
+                  >
+                    {highlightedAutofillEntries.map((entry) => (
+                      <button
+                        key={`${entry.entryIndex}-${entry.label}`}
+                        type="button"
+                        onClick={() => {
+                          jumpToAutofillEntry(entry.entryIndex);
+                        }}
+                        style={{
+                          display: 'grid',
+                          gap: '0.45rem',
+                          textAlign: 'left',
+                          padding: '0.65rem 0.8rem',
+                          border: '1px solid var(--secondary)',
+                          borderRadius: '0.6rem',
+                          background: 'var(--bg-hover)',
+                          color: 'var(--text)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'baseline',
+                            justifyContent: 'space-between',
+                            gap: '0.75rem',
+                          }}
+                        >
+                          <span style={{ fontWeight: 700 }}>{entry.label}</span>
+                          <span
+                            style={{
+                              fontVariantNumeric: 'tabular-nums',
+                              opacity: 0.85,
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {entry.matches.toLocaleString()} matches
+                          </span>
+                        </div>
+                        <span
+                          style={{
+                            fontFamily: 'monospace',
+                            letterSpacing: '0.08em',
+                            opacity: 0.72,
+                          }}
+                        >
+                          {entry.pattern}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
           <SquareAndCols
             leftIsActive={state.active.dir === Direction.Across}
             aspectRatio={state.grid.width / state.grid.height}
             square={
-              <GridView
-                isEnteringRebus={state.isEnteringRebus}
-                rebusValue={state.rebusValue}
-                grid={state.grid}
-                active={state.active}
-                dispatch={dispatch}
-                allowBlockEditing={true}
-                autofill={props.autofillEnabled ? props.autofilledGrid : []}
-                symmetry={state.symmetry}
-                selection={state.selection}
-                shortWordCells={shortWordCells}
-              />
+              <div
+                className={
+                  isAutofillFailure
+                    ? styles.gridAutofillFailure
+                    : styles.gridAutofillFrame
+                }
+              >
+                <GridView
+                  isEnteringRebus={state.isEnteringRebus}
+                  rebusValue={state.rebusValue}
+                  grid={state.grid}
+                  active={state.active}
+                  dispatch={dispatch}
+                  allowBlockEditing={true}
+                  autofill={props.autofillEnabled ? props.autofilledGrid : []}
+                  cellColors={autofillDiagnosticCellColors}
+                  symmetry={state.symmetry}
+                  selection={state.selection}
+                  shortWordCells={shortWordCells}
+                />
+              </div>
             }
             left={fillLists.left}
             right={fillLists.right}

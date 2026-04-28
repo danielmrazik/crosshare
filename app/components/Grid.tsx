@@ -38,7 +38,7 @@ interface GridViewProps {
   wrongCells?: Set<number>;
   allowBlockEditing?: boolean;
   autofill?: string[];
-  cellColors?: number[];
+  cellColors?: Array<number | undefined>;
   entryRefs?: Set<number>[];
   showAlternates?: [number, string][][] | null;
   answers?: string[] | null;

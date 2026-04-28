@@ -446,6 +446,11 @@ export function gridInterfaceReducer<T extends GridInterfaceState>(
     } else if (key.k === KeyK.AllowedCharacter) {
       const char = key.c.toUpperCase();
       state = enterText(state, char);
+      const advancePrefs = isPuzzleState(state)
+        ? state.prefs
+        : {
+            dontSkipCompleted: true,
+          };
       return {
         ...state,
         wasEntryClick: false,
@@ -453,7 +458,7 @@ export function gridInterfaceReducer<T extends GridInterfaceState>(
           state.grid,
           state.active,
           isPuzzleState(state) ? state.wrongCells : new Set(),
-          isPuzzleState(state) ? state.prefs : undefined
+          advancePrefs
         ),
       };
     } else if (key.k === KeyK.Backspace || key.k === KeyK.OskBackspace) {

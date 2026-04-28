@@ -414,6 +414,7 @@ export const PuzzleInProgressV = t.intersection([
     /* New format for circles / shading */
     cellStyles: t.record(t.string, t.array(t.number)),
     reviewedPotentialRepeats: t.array(t.string),
+    tempBlacklistedWords: t.array(t.string),
     /* This is the legacy way of supporting circles / shading */
     highlighted: t.array(t.number),
     highlight: t.keyof({ circle: null, shade: null }),
@@ -453,6 +454,7 @@ export enum KeyK {
   ShiftEnter,
   Backspace,
   Delete,
+  ClearLine,
   Escape,
   Backtick,
   Tilde,
@@ -504,6 +506,9 @@ export function fromKeyboardEvent(event: {
   if (event.metaKey || event.ctrlKey) {
     const key = event.key.toLowerCase();
     switch (key) {
+      case 'backspace':
+      case 'delete':
+        return { k: KeyK.ClearLine };
       case 'z':
         return { k: event.shiftKey ? KeyK.Redo : KeyK.Undo };
       case 'y':

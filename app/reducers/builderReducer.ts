@@ -29,6 +29,7 @@ import {
   gridWithBarToggled,
   gridWithBlockToggled,
   gridWithHiddenToggled,
+  gridWithNewChar,
   moveDown,
   moveLeft,
   moveRight,
@@ -671,13 +672,56 @@ function rotatePosition(
   };
 }
 
+function clearActiveLine(state: BuilderState): BuilderState {
+  const positions: Position[] = [];
+
+  if (state.active.dir === Direction.Across) {
+    for (let col = 0; col < state.grid.width; col += 1) {
+      positions.push({ row: state.active.row, col });
+    }
+  } else {
+    for (let row = 0; row < state.grid.height; row += 1) {
+      positions.push({ row, col: state.active.col });
+    }
+  }
+
+  let grid = state.grid;
+  for (const position of positions) {
+    const ci = cellIndex(grid, position);
+    if (
+      !state.isEditable(ci) ||
+      grid.cells[ci] === BLOCK ||
+      grid.cells[ci] === EMPTY
+    ) {
+      continue;
+    }
+    grid = gridWithNewChar(grid, position, EMPTY, Symmetry.None);
+  }
+
+  const nextActive =
+    positions.find((position) => grid.cells[cellIndex(grid, position)] !== BLOCK) ??
+    state.active;
+
+  return validateGrid({
+    ...clearSelection(state),
+    grid,
+    active: {
+      ...nextActive,
+      dir: state.active.dir,
+    },
+    wasEntryClick: false,
+  });
+}
+
 function _builderReducer(
   state: BuilderState,
   action: PuzzleAction
 ): BuilderState {
   if (isKeypressAction(action)) {
     const key = action.key;
-    if (key.k === KeyK.ShiftArrowRight) {
+    if (key.k === KeyK.ClearLine) {
+      return clearActiveLine(state);
+    } else if (key.k === KeyK.ShiftArrowRight) {
       const { start, end } = hasSelection(state)
         ? state.selection
         : emptySelection(state.active);
